@@ -78,12 +78,8 @@ const DashboardHome: React.FC = () => {
       await fetch(`${base}/api/workflow/assign-lead`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lead_id: leadId,
-          team: 'Sales Executives',
-          access_token: localStorage.getItem('bitrix_access_token'),
-          domain: localStorage.getItem('bitrix_domain'),
-        }),
+        // No credentials needed — API falls back to BITRIX_WEBHOOK_TOKEN on server
+        body: JSON.stringify({ lead_id: leadId, team: 'Sales Executives' }),
       });
       await fetchData();
     } catch (e) { console.error(e); }

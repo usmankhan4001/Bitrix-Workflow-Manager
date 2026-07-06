@@ -34,12 +34,15 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-bitrixflow_user}:${POSTGRES_PASSWORD:-bitrixflow_password}@postgres:5432/${POSTGRES_DB:-bitrixflow}?schema=public
-      BITRIX_PORTAL_URL: ${BITRIX_PORTAL_URL}
-      BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID}
-      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET}
-      BITRIX_REDIRECT_URI: ${BITRIX_REDIRECT_URI}
-      FRONTEND_URL: ${FRONTEND_URL}
+      # Bitrix24 portal
+      BITRIX_PORTAL_URL: ${BITRIX_PORTAL_URL:-https://pcicrm.bitrix24.com}
+      # Incoming webhook token — used for all Bitrix24 API calls (user list, lead assignment, tasks)
+      # Get from: pcicrm.bitrix24.com → Apps → Webhooks → Incoming webhooks
+      BITRIX_WEBHOOK_TOKEN: ${BITRIX_WEBHOOK_TOKEN}
+      # OnCloud WhatsApp API
       ONCLOUD_API_TOKEN: ${ONCLOUD_API_TOKEN}
+      # App public URL (used for CORS)
+      FRONTEND_URL: ${FRONTEND_URL:-https://manageworkflow-bitrix24.premierchoiceint.online}
     networks:
       - bitrixflow
 

@@ -75,6 +75,7 @@ export class WhatsappService {
     leadName: string,
     leadContact: string,
     slaHours: number,
+    source = '',
   ): Promise<boolean> {
     const deadline = new Date(Date.now() + slaHours * 3600 * 1000);
     const deadlineStr = deadline.toLocaleString('en-GB', {
@@ -87,6 +88,7 @@ export class WhatsappService {
       `👤 Agent: ${agentName}\n` +
       `📋 Lead: ${leadName}\n` +
       `📞 Contact: ${leadContact || 'N/A'}\n` +
+      `🌐 Source: ${source || 'N/A'}\n` +
       `⏰ Complete within: ${slaHours} hours (by ${deadlineStr})\n\n` +
       `Please follow up and update the lead in Bitrix24.`;
 

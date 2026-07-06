@@ -267,6 +267,14 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         email = lead.EMAIL[0]?.VALUE || '';
       }
 
+      // Fallback: some leads keep no phone/email on the lead itself — it lives on
+      // the linked contact. Pull it from there so the alert shows a real number.
+      if ((!phone || !email) && lead.CONTACT_ID) {
+        const contact = await this.fetchContactComm(String(lead.CONTACT_ID), creds);
+        if (!phone) phone = contact.phone;
+        if (!email) email = contact.email;
+      }
+
       return {
         name: displayName,
         source: sourceLabel,
@@ -281,6 +289,21 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     } catch (err) {
       this.logger.warn(`fetchLeadDetails failed for #${leadId}: ${(err as Error).message}`);
       return { name: `Lead #${leadId}`, source: 'CRM', sourceId: '', title: `Lead #${leadId}` };
+    }
+  }
+
+  // Read phone/email from a CRM contact (used when the lead has none of its own).
+  private async fetchContactComm(contactId: string, creds: BitrixCreds): Promise<{ phone: string; email: string }> {
+    try {
+      const sep = this.bitrixUrl('crm.contact.get', creds).includes('?') ? '&' : '?';
+      const res = await fetch(`${this.bitrixUrl('crm.contact.get', creds)}${sep}id=${contactId}`);
+      const data = (await res.json()) as any;
+      const c = data.result || {};
+      const phone = Array.isArray(c.PHONE) && c.PHONE.length > 0 ? (c.PHONE[0]?.VALUE || '') : '';
+      const email = Array.isArray(c.EMAIL) && c.EMAIL.length > 0 ? (c.EMAIL[0]?.VALUE || '') : '';
+      return { phone, email };
+    } catch {
+      return { phone: '', email: '' };
     }
   }
 
@@ -494,7 +517,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     });
     let waNotified = false;
     if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
-      waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours);
+      waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours, lead.source);
       if (waNotified) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
     }
     this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${reason}). Task: ${taskId}. WA: ${waNotified}`);
@@ -524,7 +547,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       data: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
     });
     if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
-      const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours);
+      const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours, lead.source);
       if (ok) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
     }
     return { success: true, agent: manager, taskId, message: reason };

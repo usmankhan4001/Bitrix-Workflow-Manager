@@ -143,7 +143,7 @@ const Notifications: React.FC = () => {
                 This is the message each agent receives when a lead is assigned to them (no templates to configure):
               </p>
               <div style={{ background: 'var(--b24-input-bg)', border: '1px solid var(--b24-divider)', borderRadius: 8, padding: '14px 16px', fontSize: 13, color: 'var(--b24-text)', whiteSpace: 'pre-line', lineHeight: 1.7, fontFamily: 'system-ui' }}>
-                {'🟢 New lead assigned to you\n\n👤 Agent: Ahmad Ali Shah\n📋 Lead: Tania\n📞 Contact: 03001234567\n⏰ Complete within: ' + (settings.SLA_HOURS || '24') + ' hours (by 16 Jun, 03:20 pm)\n\nPlease follow up and update the lead in Bitrix24.'}
+                {'🟢 New lead assigned to you\n\n👤 Agent: Ahmad Ali Shah\n📋 Lead: Tania\n📞 Contact: 03001234567\n🌐 Source: Website\n⏰ Complete within: ' + (settings.SLA_HOURS || '24') + ' hours (by 16 Jun, 03:20 pm)\n\nPlease follow up and update the lead in Bitrix24.'}
               </div>
             </div>
           </div>

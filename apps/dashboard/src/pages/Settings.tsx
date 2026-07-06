@@ -120,18 +120,23 @@ const Settings: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {}),
+      fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {} as Record<string, string>),
       fetch(`${API()}/api/bitrix/webhook-users`).then(r => r.ok ? r.json() : { users: [], departments: [] }),
       fetch(`${API()}/api/workflow/teams`).then(r => r.ok ? r.json() : []),
       fetch(`${API()}/api/bitrix/webhook-sources`).then(r => r.ok ? r.json() : { sources: [] }),
-    ]).then(([s, u, t, src]) => {
+    ]).then(([sData, u, t, src]) => {
+      const s = sData as Record<string, string>;
+      const activeTeams = t && t.length > 0 ? t : ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
+      if (t && t.length > 0) {
+        setTeams(t);
+      }
+      if (!s.LEAD_ASSIGNMENT_TEAM && activeTeams.length > 0) {
+        s.LEAD_ASSIGNMENT_TEAM = activeTeams[0];
+      }
       setSettings(s);
       setBitrixUsers((u.users || []).filter((u: BitrixUser) => u.active));
       setDepartments(u.departments || []);
       setBitrixSources(src.sources || []);
-      if (t && t.length > 0) {
-        setTeams(t);
-      }
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 

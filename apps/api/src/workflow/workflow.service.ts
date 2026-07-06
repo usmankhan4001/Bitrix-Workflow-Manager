@@ -499,6 +499,26 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   // ─── GAP 2: Task comment webhook — full parity logic ──────────────────────
 
+  async fetchLeadIdFromTask(taskId: string, creds: BitrixCreds): Promise<string | null> {
+    try {
+      const sep = this.bitrixUrl('tasks.task.get', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('tasks.task.get', creds)}${sep}taskId=${taskId}&select[]=UF_CRM_TASK&select[]=ID`;
+      const res = await fetch(url);
+      const data = (await res.json()) as any;
+      const crmField = data.result?.task?.ufCrmTask || data.result?.task?.UF_CRM_TASK;
+      if (crmField && Array.isArray(crmField)) {
+        const leadItem = crmField.find((item: string) => item.startsWith('L_'));
+        if (leadItem) {
+          return leadItem.replace('L_', '');
+        }
+      }
+      return null;
+    } catch (err) {
+      this.logger.warn(`fetchLeadIdFromTask failed for task #${taskId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
   async handleTaskCommentWebhook(payload: any): Promise<{ action: string; detail?: string }> {
     const settings = await this.getSettings();
     const creds = this.getWebhookCreds();
@@ -511,7 +531,16 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const comment: string = (payload?.data?.FIELDS_AFTER?.POST_MESSAGE || '').toLowerCase();
     const responsibleUserId: string = payload?.data?.FIELDS_AFTER?.CREATED_BY
       || payload?.data?.FIELDS?.CREATED_BY || '';
-    const leadId: string = payload?.data?.LEAD_ID || payload?.LEAD_ID || '';
+    
+    let leadId: string = payload?.data?.LEAD_ID || payload?.LEAD_ID || '';
+
+    if (!leadId && taskId) {
+      const resolved = await this.fetchLeadIdFromTask(taskId, creds);
+      if (resolved) {
+        leadId = resolved;
+        this.logger.log(`Resolved Lead ID #${leadId} dynamically from task #${taskId}`);
+      }
+    }
 
     // ── COMPLETED ──
     if (comment.includes('complete') || comment.includes('done') || comment.includes('finished')) {
@@ -761,5 +790,14 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   async getTeams(): Promise<string[]> {
     const allAgents = await this.agent.findMany({ select: { team: true } });
     return [...new Set(allAgents.map(a => a.team))].sort();
+  }
+
+  async clearQueue() {
+    const result = await this.lateLead.updateMany({
+      where: { processed: false },
+      data: { processed: true, processed_at: new Date() }
+    });
+    this.logger.log(`Cleared ${result.count} leads from the queue without assigning them.`);
+    return { success: true, clearedCount: result.count };
   }
 }

@@ -125,6 +125,11 @@ export class WorkflowController {
     return this.workflowService.processAllLateLeads();
   }
 
+  @Post('clear-queue')
+  async clearQueue() {
+    return this.workflowService.clearQueue();
+  }
+
   // ─── Bitrix24 Inbound Webhook (Task Comments) ─────────────────────────────
 
   @Post('webhook/task-comment')

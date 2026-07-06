@@ -21,6 +21,8 @@ const DashboardHome: React.FC = () => {
   const [status, setStatus] = useState<WorkflowStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [clearing, setClearing] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -31,6 +33,28 @@ const DashboardHome: React.FC = () => {
       console.error('Error fetching dashboard data:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearQueue = async () => {
+    if (!window.confirm("Are you sure you want to clear the queue without assigning the leads?")) return;
+    setClearing(true);
+    try {
+      const base = API();
+      const res = await fetch(`${base}/api/workflow/clear-queue`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        alert("Queue cleared successfully!");
+        fetchData();
+      } else {
+        alert("Failed to clear queue.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error clearing queue.");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -189,9 +213,21 @@ const DashboardHome: React.FC = () => {
                 <span style={{ fontSize: 24, fontWeight: 700, color: status.queueDepth > 0 ? 'var(--b24-orange)' : 'var(--b24-text)' }}>
                   {loading ? '—' : status.queueDepth}
                 </span>
-                <span className={`b24-badge b24-badge-${status.queueDepth > 0 ? 'warning' : 'success'}`} style={{ alignSelf: 'flex-start', fontSize: 10 }}>
-                  {status.queueDepth > 0 ? 'Held for business hours' : 'Queue is clear'}
-                </span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className={`b24-badge b24-badge-${status.queueDepth > 0 ? 'warning' : 'success'}`} style={{ alignSelf: 'flex-start', fontSize: 10 }}>
+                    {status.queueDepth > 0 ? 'Held for business hours' : 'Queue is clear'}
+                  </span>
+                  {status.queueDepth > 0 && (
+                    <button
+                      onClick={handleClearQueue}
+                      disabled={clearing}
+                      className="b24-btn b24-btn-secondary"
+                      style={{ height: 20, fontSize: 9, padding: '0 6px', borderColor: 'var(--b24-red)', color: 'var(--b24-red)' }}
+                    >
+                      {clearing ? 'Clearing...' : 'Clear'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="b24-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>

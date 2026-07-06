@@ -52,7 +52,8 @@
       "Bash(npm install *)",
       "Bash(npx prisma *)",
       "Bash(git commit -m 'fix: replace npm ci with npm install in Dockerfiles \\(no lock files in repo\\) *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(Get-ChildItem -Force)"
     ]
   }
 }

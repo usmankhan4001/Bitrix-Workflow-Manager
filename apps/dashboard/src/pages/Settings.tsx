@@ -106,6 +106,7 @@ const EscalationDiagram: React.FC = () => (
 // ── Main ──────────────────────────────────────────────────────────────────────
 interface BitrixUser { id: string; name: string; active: boolean; }
 interface BitrixDept { id: string; name: string; }
+interface BitrixSource { id: string; name: string; }
 
 const Settings: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -114,6 +115,7 @@ const Settings: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [bitrixUsers, setBitrixUsers] = useState<BitrixUser[]>([]);
   const [departments, setDepartments] = useState<BitrixDept[]>([]);
+  const [bitrixSources, setBitrixSources] = useState<BitrixSource[]>([]);
   const [teams, setTeams] = useState<string[]>(['B2C', 'Sales Executives', 'Telly Sales', 'B2B']);
 
   useEffect(() => {
@@ -121,10 +123,12 @@ const Settings: React.FC = () => {
       fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {}),
       fetch(`${API()}/api/bitrix/webhook-users`).then(r => r.ok ? r.json() : { users: [], departments: [] }),
       fetch(`${API()}/api/workflow/teams`).then(r => r.ok ? r.json() : []),
-    ]).then(([s, u, t]) => {
+      fetch(`${API()}/api/bitrix/webhook-sources`).then(r => r.ok ? r.json() : { sources: [] }),
+    ]).then(([s, u, t, src]) => {
       setSettings(s);
       setBitrixUsers((u.users || []).filter((u: BitrixUser) => u.active));
       setDepartments(u.departments || []);
+      setBitrixSources(src.sources || []);
       if (t && t.length > 0) {
         setTeams(t);
       }
@@ -159,6 +163,12 @@ const Settings: React.FC = () => {
   const toggleEligibleDept = (id: string) => {
     const next = eligibleDeptIds.includes(id) ? eligibleDeptIds.filter(d => d !== id) : [...eligibleDeptIds, id];
     setSettings(s => ({ ...s, ELIGIBLE_DEPT_IDS: JSON.stringify(next) }));
+  };
+
+  const allowedSourceIds: string[] = (() => { try { return JSON.parse(settings.ALLOWED_SOURCES || '[]'); } catch { return []; } })();
+  const toggleAllowedSource = (id: string) => {
+    const next = allowedSourceIds.includes(id) ? allowedSourceIds.filter(s => s !== id) : [...allowedSourceIds, id];
+    setSettings(s => ({ ...s, ALLOWED_SOURCES: JSON.stringify(next) }));
   };
 
   const managerName = bitrixUsers.find(u => u.id === settings.WORKFLOW_MANAGER_ID)?.name;
@@ -282,7 +292,7 @@ const Settings: React.FC = () => {
           <Section
             icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
             title="Assignment Scope"
-            desc="Which team and departments receive incoming leads"
+            desc="Which team, departments and lead sources receive incoming leads"
           >
             <FormRow
               label="Lead Assignment Team"
@@ -303,7 +313,8 @@ const Settings: React.FC = () => {
               }
             />
 
-            <div style={{ padding: '14px 0 6px' }}>
+            {/* Eligible Departments */}
+            <div style={{ padding: '14px 0 6px', borderBottom: '1px solid var(--b24-divider-light)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--b24-text)', marginBottom: 2, margin: 0 }}>
@@ -337,6 +348,48 @@ const Settings: React.FC = () => {
                           </svg>
                         )}
                         {d.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Whitelisted Lead Sources */}
+            <div style={{ padding: '14px 0 6px', marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--b24-text)', marginBottom: 2, margin: 0 }}>
+                    Allowed Lead Sources (Allow List)
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0 }}>
+                    {allowedSourceIds.length === 0
+                      ? 'All lead sources are allowed by default'
+                      : `${allowedSourceIds.length} selected source${allowedSourceIds.length > 1 ? 's' : ''} allowed — all other sources will be ignored`}
+                  </p>
+                </div>
+                <SaveBtn onClick={() => save('ALLOWED_SOURCES', settings.ALLOWED_SOURCES || '[]')} saving={saving === 'ALLOWED_SOURCES'} />
+              </div>
+              {bitrixSources.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--b24-text-faint)', fontStyle: 'italic', margin: 0 }}>No lead sources loaded — check Bitrix24 credentials.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {bitrixSources.map(src => {
+                    const checked = allowedSourceIds.includes(src.id);
+                    return (
+                      <button
+                        key={src.id}
+                        type="button"
+                        onClick={() => toggleAllowedSource(src.id)}
+                        className={`b24-btn ${checked ? 'b24-btn-primary' : 'b24-btn-secondary'}`}
+                        style={{ height: 28, fontSize: 12, padding: '0 12px', gap: 5, display: 'flex', alignItems: 'center' }}
+                      >
+                        {checked && (
+                          <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.121-4.121a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z" clipRule="evenodd"/>
+                          </svg>
+                        )}
+                        {src.name} <span style={{ fontSize: 10, opacity: 0.6, fontFamily: 'monospace' }}>({src.id})</span>
                       </button>
                     );
                   })}

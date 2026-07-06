@@ -85,6 +85,27 @@ export class BitrixService {
     }
   }
 
+  async getWebhookSources(webhookToken: string, portalUrl: string): Promise<any[]> {
+    const base = this.resolveWebhookBase(webhookToken, portalUrl);
+    try {
+      const res = await fetch(`${base}/crm.status.list.json?filter[ENTITY_ID]=SOURCE`);
+      if (!res.ok) {
+        this.logger.warn(`crm.status.list returned ${res.status} — webhook may be missing "crm" scope`);
+        return [];
+      }
+      const data = (await res.json()) as any;
+      if (data.error) {
+        this.logger.warn(`crm.status.list error: ${data.error_description || data.error}`);
+        return [];
+      }
+      const statuses = data.result || [];
+      return statuses.map((s: any) => ({ id: s.STATUS_ID, name: s.NAME }));
+    } catch (err) {
+      this.logger.warn(`getWebhookSources failed: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
   // Build a department name map from user UF_DEPARTMENT IDs
   // Used as fallback when department.get is not permitted
   buildDeptMapFromUsers(users: any[]): Record<number, string> {

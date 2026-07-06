@@ -61,7 +61,7 @@ const DashboardHome: React.FC = () => {
       await fetch(`${API()}/api/workflow/assign-lead`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead_id: leadId, team: status.assignmentTeam }),
+        body: JSON.stringify({ lead_id: leadId, team: status.assignmentTeam, force: true }),
       });
       await fetchData();
     } catch (e) {

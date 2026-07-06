@@ -1,0 +1,392 @@
+BITRIXFLOW
+Complete Sales Operations & Lead Distribution Platform
+Master Technical Specification (Part 2)
+Technical Architecture, Database Design, API Design & Implementation Blueprint
+Version: 1.0 Status: Architecture Lock Document
+
+8. DATABASE ARCHITECTURE
+Database:
+PostgreSQL 16+
+ORM:
+Prisma ORM
+Naming Convention:
+snake_case
+Primary Keys:
+UUID
+
+CORE TABLES
+
+organizations
+Future-proof multi-company support.
+id UUID PKname VARCHAR(255)slug VARCHAR(255)active BOOLEANcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+users
+Dashboard users.
+id UUID PKorganization_id UUID FKname VARCHAR(255)email VARCHAR(255)password_hash TEXTrole ENUMactive BOOLEANlast_login TIMESTAMPcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+teams
+id UUID PKorganization_id UUID FKname VARCHAR(255)description TEXTassignment_method ENUMmanager_user_id UUIDfallback_manager_user_id UUIDactive BOOLEANcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+agents
+id UUID PKorganization_id UUID FKbitrix_user_id BIGINTname VARCHAR(255)email VARCHAR(255)phone VARCHAR(255)whatsapp_number VARCHAR(255)team_id UUID FKactive BOOLEANavailability_status ENUMweight INTEGERpriority INTEGERlead_capacity INTEGER NULLnotes TEXTlast_assigned_at TIMESTAMPcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+source_routes
+id UUID PKorganization_id UUID FKsource_key VARCHAR(255)source_name VARCHAR(255)team_id UUID FKactive BOOLEANis_default BOOLEANis_excluded BOOLEANpriority INTEGERcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+assignment_rules
+id UUID PKorganization_id UUID FKname VARCHAR(255)rule_type ENUMconditions JSONBactions JSONBpriority INTEGERactive BOOLEANcreated_at TIMESTAMPupdated_at TIMESTAMP
+Purpose:
+Rule Builder.
+
+assignments
+Main assignment log.
+id UUID PKlead_id BIGINTlead_title TEXTlead_name TEXTphone TEXTsource_key TEXTteam_id UUID FKagent_id UUID FKassignment_method ENUMassignment_reason TEXTstatus ENUMassigned_at TIMESTAMPcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+assignment_events
+Detailed assignment history.
+id UUID PKassignment_id UUID FKevent_type ENUMdescription TEXTpayload JSONBcreated_at TIMESTAMP
+
+workflow_activities
+id UUID PKassignment_id UUID FKbitrix_activity_id BIGINTlead_id BIGINTagent_id UUID FKdeadline TIMESTAMPcompleted BOOLEANcompleted_at TIMESTAMPescalated BOOLEANescalated_at TIMESTAMPcreated_at TIMESTAMPupdated_at TIMESTAMP
+
+escalation_logs
+id UUID PKassignment_id UUID FKactivity_id UUID FKlevel INTEGERtarget_type ENUMtarget_id TEXTmessage TEXTstatus ENUMcreated_at TIMESTAMP
+
+campaign_attribution
+id UUID PKlead_id BIGINTsource TEXTcampaign TEXTadset TEXTad TEXTutm_source TEXTutm_medium TEXTutm_campaign TEXTutm_term TEXTutm_content TEXTcreated_at TIMESTAMP
+
+audit_logs
+id UUID PKactor_type ENUMactor_id TEXTaction TEXTentity_type TEXTentity_id TEXTbefore_data JSONBafter_data JSONBcreated_at TIMESTAMP
+
+webhook_events
+Idempotency table.
+id UUID PKevent_id TEXT UNIQUEevent_type TEXTlead_id BIGINTpayload JSONBprocessed BOOLEANprocessed_at TIMESTAMPcreated_at TIMESTAMP
+
+system_settings
+key TEXT PKvalue JSONBupdated_at TIMESTAMP
+
+9. NESTJS ARCHITECTURE
+Repository Structure:
+apps/└── apisrc/├── auth├── bitrix├── assignments├── agents├── teams├── routing├── workflow├── activities├── escalations├── notifications├── whatsapp├── reporting├── campaigns├── audits├── settings├── dashboard├── metadata-sync├── scheduler├── rule-builderprisma/
+
+10. BITRIX METADATA SYNC ENGINE
+Purpose:
+Never hardcode Bitrix values.
+
+Synchronize Users
+Schedule:
+Every 15 minutes
+Store:
+Bitrix User IDNameDepartmentPositionStatus
+
+Synchronize Stages
+Store:
+PipelineStage IDStage NameSort Order
+
+Synchronize Sources
+Store:
+Source IDSource Name
+
+Synchronize Pipelines
+Store:
+Pipeline IDPipeline Name
+
+11. ASSIGNMENT ENGINE TECHNICAL DESIGN
+Primary Algorithm:
+Hybrid Mode.
+
+Step 1
+Receive Lead.
+
+Step 2
+Determine Source.
+Example:
+1|FACEBOOK
+
+Step 3
+Find Route.
+Example:
+1|FACEBOOK↓Telesales Team
+
+Step 4
+Load Active Agents.
+Filter:
+active = trueavailability = available
+
+Step 5
+Rank Agents.
+Sort by:
+lowest leads today↓oldest assignment↓highest priority
+
+Step 6
+Select Agent.
+
+Step 7
+Create Assignment Log.
+
+Step 8
+Update Bitrix Lead.
+
+Step 9
+Create CRM Activity.
+
+Step 10
+Send Notifications.
+
+12. LEAD OWNERSHIP ENGINE
+Purpose:
+Prevent lead theft.
+
+Ownership States:
+OwnedSharedTransferredReleasedEscalated
+
+Rules:
+Lead owner cannot be changed by:
+Sales Agent
+Allowed:
+AdminWorkflow ManagerSales Director
+
+Ownership Window:
+Configurable.
+Default:
+30 Days
+
+13. CRM ACTIVITY ENGINE
+Purpose:
+Create and monitor activities.
+
+Activity Types:
+CallMeetingSite VisitProposalFollow-Up
+
+Default Lead Assignment Activity:
+Call LeadDeadline = 30 Minutes
+
+Activity Completion Rules:
+When completed:
+Update workflow statusUpdate metricsTrigger next stage automation
+
+14. SLA ENGINE
+Purpose:
+Track response time.
+
+Example SLA Profiles
+Meta Ads
+15 Minutes
+Website
+30 Minutes
+Referral
+2 Hours
+Walk-In
+Immediate
+
+SLA States:
+PendingOn TimeLateMissedEscalated
+
+15. ESCALATION ENGINE
+Worker Frequency:
+Every 5 Minutes
+
+Level 1
+Agent Reminder
+After:
+100% SLA elapsed
+
+Level 2
+Team Manager
+After:
+150% SLA elapsed
+
+Level 3
+Workflow Manager
+After:
+200% SLA elapsed
+
+Level 4
+Sales Director
+After:
+300% SLA elapsed
+
+16. WHATSAPP ENGINE
+Provider Abstraction Layer.
+Supported:
+Meta Cloud APIWAHA360dialogTwilioWATI
+
+Internal Interface:
+sendMessage()sendTemplate()sendMedia()
+All providers implement same interface.
+
+17. NOTIFICATION ENGINE
+Channels:
+WhatsAppBitrix NotificationEmailDashboard Alerts
+
+Events:
+Lead AssignedActivity DueActivity MissedEscalationFallback AssignmentOwnership Transfer
+
+18. REPORTING ENGINE
+Reports:
+
+Agent Report
+Metrics:
+Assigned LeadsContact RateAverage Response TimeMeetingsSite VisitsSales
+
+Team Report
+Metrics:
+Lead VolumeConversionsRevenueSLA Compliance
+
+Source Report
+Metrics:
+MetaGoogleWhatsAppReferralWebsite
+
+Campaign Report
+Metrics:
+LeadsQualifiedVisitsDealsRevenue
+
+19. DASHBOARD UI
+
+Dashboard Home
+Widgets:
+Leads TodayAssigned TodayPending TodayEscalationsActive AgentsSLA Compliance
+
+Agents Screen
+Columns:
+NameTeamStatusAvailabilityLeads TodayLast Assignment
+Actions:
+ActivateDeactivateEditTransfer Team
+
+Teams Screen
+Columns:
+TeamManagerAgentsMethodStatus
+
+Source Routing Screen
+Columns:
+SourceRoutePriorityStatus
+
+Assignment Logs Screen
+Filters:
+DateLeadAgentTeamSourceStatus
+
+Escalation Screen
+Filters:
+DateAgentManagerLevelStatus
+
+Reports Screen
+Tabs:
+AgentTeamSourceCampaignSLA
+
+Settings Screen
+Sections:
+GeneralBitrixWhatsAppSLAAssignmentSecurity
+
+20. API DESIGN
+
+Authentication
+POST /api/auth/loginPOST /api/auth/logoutGET /api/auth/me
+
+Agents
+GET /api/agentsPOST /api/agentsPUT /api/agents/:idDELETE /api/agents/:id
+
+Teams
+GET /api/teamsPOST /api/teamsPUT /api/teams/:id
+
+Source Routes
+GET /api/routesPOST /api/routesPUT /api/routes/:id
+
+Assignments
+GET /api/assignmentsGET /api/assignments/:id
+
+Reports
+GET /api/reports/agentsGET /api/reports/teamsGET /api/reports/sourcesGET /api/reports/campaigns
+
+Settings
+GET /api/settingsPUT /api/settings
+
+21. SECURITY MODEL
+Authentication:
+JWTRefresh Tokens
+
+Authorization:
+RBAC
+Roles:
+Super AdminSales DirectorWorkflow ManagerTeam ManagerViewer
+
+Audit:
+Every change recorded.
+
+Secrets:
+Environment Variables Only.
+DATABASE_URL=JWT_SECRET=BITRIX_CLIENT_ID=BITRIX_CLIENT_SECRET=WHATSAPP_TOKEN=REDIS_URL=
+
+22. BACKUP STRATEGY
+Database
+Daily:
+7 Daily Backups
+Weekly:
+4 Weekly Backups
+Monthly:
+12 Monthly Backups
+
+23. DEPLOYMENT ARCHITECTURE
+Infrastructure:
+HetznerDokployDockerPostgreSQLRedisNestJSReactCloudflare
+
+Containers:
+apidashboardpostgresredisbackup-service
+
+24. OBSERVABILITY
+Logs:
+Application LogsAssignment LogsEscalation LogsAPI Logs
+Monitoring:
+UptimeCPUMemoryQueue HealthWebhook Failures
+
+25. GO-LIVE CHECKLIST
+Phase 1
+Infrastructure
+✓ Server
+✓ Database
+✓ SSL
+✓ Domains
+
+Phase 2
+Bitrix
+✓ OAuth
+✓ Webhooks
+✓ User Sync
+✓ Stage Sync
+✓ Source Sync
+
+Phase 3
+Assignment
+✓ Team Setup
+✓ Agent Setup
+✓ Routes Setup
+✓ Workflow Manager Setup
+
+Phase 4
+Notifications
+✓ WhatsApp
+✓ Bitrix Notifications
+✓ Escalation Rules
+
+Phase 5
+Testing
+✓ Lead Assignment
+✓ Fallback
+✓ Escalation
+✓ Ownership
+✓ Reporting
+
+Phase 6
+Production
+✓ Switch Live Webhooks
+✓ Monitor
+✓ Validate Logs
+✓ Team Training
+
+26. PRODUCT VISION (FINAL)
+BitrixFlow becomes a complete Sales Operations Platform.
+Bitrix24 remains CRM.
+BitrixFlow manages:
+Lead DistributionLead OwnershipSLAEscalationNotificationsAttributionReportingGovernanceAuditWorkflow Automation
+The system must support:
+100+ AgentsMultiple TeamsMultiple PipelinesMultiple CompaniesMillions of Assignment LogsFuture AI Modules
+without architectural redesign.

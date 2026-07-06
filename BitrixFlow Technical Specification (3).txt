@@ -1,0 +1,476 @@
+BITRIXFLOW
+Complete Sales Operations & Lead Distribution Platform
+Master Technical Specification (Part 1)
+Version: 1.0 Status: Architecture Lock Document Project Type: External Workflow & Sales Operations Platform for Bitrix24 Client: Premier Choice International Primary CRM: Bitrix24 Primary Industry: Real Estate
+
+1. EXECUTIVE SUMMARY
+BitrixFlow is a complete external Sales Operations Platform that extends Bitrix24 CRM.
+The purpose of BitrixFlow is not to replace Bitrix24.
+Instead:
+Bitrix24 remains the primary CRM and user workspace.
+BitrixFlow becomes:
+Lead Distribution Engine
+Workflow Manager
+Assignment Controller
+SLA Manager
+Escalation Engine
+Reporting Engine
+Audit & Compliance Layer
+Marketing Attribution Layer
+WhatsApp Notification Hub
+The platform is designed to solve operational problems commonly found in high-volume real estate sales environments.
+These include:
+Unfair lead distribution
+Missed follow-ups
+Agent inactivity
+Lead ownership disputes
+Lack of accountability
+Poor manager visibility
+Weak source attribution
+CRM misuse
+Inconsistent assignment logic
+
+2. BUSINESS OBJECTIVES
+The system must achieve the following objectives.
+Objective 1
+Ensure every lead is assigned fairly.
+Objective 2
+Ensure every lead receives timely follow-up.
+Objective 3
+Ensure managers can monitor agent performance.
+Objective 4
+Ensure every action is auditable.
+Objective 5
+Ensure source-to-sale visibility.
+Objective 6
+Ensure operational scalability.
+Objective 7
+Ensure all assignment rules are configurable.
+No hardcoded logic should exist inside source code.
+
+3. SYSTEM PHILOSOPHY
+The platform follows three principles.
+Principle 1
+CRM Data Lives In Bitrix24
+Bitrix24 remains:
+Lead Database
+Deal Database
+Contact Database
+Activity Database
+Sales Workspace
+
+Principle 2
+Business Logic Lives In BitrixFlow
+BitrixFlow controls:
+Assignment
+Escalation
+Notifications
+SLA
+Routing
+Governance
+
+Principle 3
+Configuration Lives In Admin Dashboard
+No hardcoded:
+User IDs
+Teams
+Sources
+Stages
+Pipelines
+Routing Rules
+Everything configurable.
+
+4. USER ROLES
+Super Administrator
+Full access.
+Permissions:
+Manage system
+Manage settings
+Manage integrations
+View all logs
+
+Sales Director
+Permissions:
+View all teams
+View all reports
+Override assignments
+View SLA performance
+
+Workflow Manager
+Permissions:
+Manage assignments
+Resolve escalations
+Manage routing
+Manage agent availability
+
+Team Manager
+Permissions:
+View own team
+Manage own agents
+View own reports
+
+Sales Agent
+Permissions:
+View assigned leads
+View own performance
+
+Viewer
+Read-only access.
+
+5. CORE MODULES
+The platform consists of twenty modules.
+
+MODULE 1
+Bitrix24 Integration Core
+Purpose:
+Two-way communication between BitrixFlow and Bitrix24.
+Responsibilities:
+Fetch Leads
+Update Leads
+Create Activities
+Read Activities
+Read Users
+Read Pipelines
+Read Stages
+Read Sources
+Create Timeline Notes
+Send Notifications
+
+MODULE 2
+Lead Distribution Engine
+Purpose:
+Determine who receives a lead.
+Supported Assignment Methods:
+Simple Round Robin
+A → B → C → A
+
+Active Round Robin
+Skip inactive agents.
+
+Load Balanced
+Assign to least-loaded agent.
+
+Hybrid Assignment
+Default method.
+Priority:
+Active Agent
+Lowest Lead Load
+Oldest Assignment Timestamp
+
+Weighted Assignment
+Lead distribution based on agent weight.
+Example:
+Senior Agent = Weight 3
+Junior Agent = Weight 1
+
+Source-Based Assignment
+Different sources routed to different teams.
+
+MODULE 3
+Agent Management Engine
+Purpose:
+Manage all sales agents.
+Each agent contains:
+Name
+Bitrix User ID
+Department
+Designation
+WhatsApp Number
+Active Status
+Availability Status
+Priority
+Weight
+Notes
+Availability States:
+Available
+Busy
+Break
+Leave
+Offline
+Only Available agents can receive leads.
+
+MODULE 4
+Team Management Engine
+Purpose:
+Group agents into functional units.
+Examples:
+Telesales
+Sales Executives
+Investment Consultants
+International Sales
+Corporate Sales
+Each team contains:
+Manager
+Fallback Manager
+Assignment Method
+Priority
+SLA Profile
+
+MODULE 5
+Workflow Manager Engine
+Purpose:
+Handle exceptional situations.
+Scenarios:
+No Agent Available
+Assign to Workflow Manager.
+Assignment Failure
+Assign to Workflow Manager.
+SLA Violation
+Escalate to Workflow Manager.
+Duplicate Conflict
+Workflow Manager review.
+Manual Approval
+Workflow Manager review.
+
+MODULE 6
+Follow-Up SLA Engine
+Purpose:
+Ensure timely contact.
+Each source can have separate SLA.
+Example:
+Meta Ads → 15 Minutes
+Website → 30 Minutes
+Referral → 2 Hours
+Walk-In → Immediate
+Corporate Inquiry → 4 Hours
+
+Escalation Levels:
+Level 1:
+Agent Reminder
+Level 2:
+Team Manager Notification
+Level 3:
+Workflow Manager Notification
+Level 4:
+Sales Director Notification
+
+MODULE 7
+Activity Engine
+Purpose:
+Automatically create CRM activities.
+Activity Types:
+Call
+Meeting
+Follow-Up
+Site Visit
+Proposal
+Closing
+Example:
+Lead Assigned
+↓
+Create Call Activity
+
+Lead Qualified
+↓
+Create Site Visit Activity
+
+Site Visit Completed
+↓
+Create Proposal Activity
+
+MODULE 8
+Duplicate Detection Engine
+Purpose:
+Prevent duplicate leads.
+Checks:
+Phone Number
+Email
+CNIC
+Existing Contact
+Existing Deal
+Actions:
+Merge
+Link
+Ignore
+Workflow Review
+
+MODULE 9
+Lead Ownership Engine
+Purpose:
+Prevent lead theft.
+Rules:
+Ownership Window
+Example:
+30 Days
+Only:
+Workflow Manager
+Team Manager
+Admin
+can override ownership.
+All ownership changes are logged.
+
+MODULE 10
+WhatsApp Notification Engine
+Supported Events:
+New Lead Assignment
+Follow-Up Reminder
+Escalation
+Site Visit Reminder
+Proposal Reminder
+Lost Lead Alert
+Supported Recipients:
+Agent
+Team Manager
+Workflow Manager
+Sales Director
+
+MODULE 11
+Audit Log Engine
+Purpose:
+Record everything.
+Events:
+Lead Assigned
+Lead Reassigned
+Lead Escalated
+Agent Activated
+Agent Deactivated
+Source Changed
+Team Modified
+Settings Modified
+Nothing occurs silently.
+
+MODULE 12
+Assignment Logs Engine
+Purpose:
+Track lead assignment decisions.
+Each log contains:
+Lead
+Agent
+Team
+Source
+Assignment Algorithm
+Reason
+Timestamp
+Managers can answer:
+“Why did this lead go to this agent?”
+Instantly.
+
+MODULE 13
+Marketing Attribution Engine
+Purpose:
+Track campaign performance.
+Stores:
+Source
+Campaign
+Ad Set
+Ad
+UTM Source
+UTM Campaign
+UTM Medium
+Allows:
+Campaign → Lead → Sale visibility.
+
+MODULE 14
+Reporting Engine
+Reports:
+Agent Performance
+Leads Assigned
+Leads Contacted
+Response Time
+Conversion Rate
+Team Performance
+Lead Volume
+Meetings
+Site Visits
+Sales
+Source Performance
+Meta
+Google
+WhatsApp
+Referral
+SLA Performance
+On Time
+Late
+Missed
+
+MODULE 15
+Dashboard Engine
+Overview Widgets:
+Leads Today
+Assigned Today
+Escalations Today
+Active Agents
+Inactive Agents
+SLA Compliance
+Conversion Funnel
+Source Performance
+
+MODULE 16
+Rule Builder Engine
+Purpose:
+No-code workflow creation.
+Example:
+IF Source = Meta
+AND Project = Box Park
+THEN Assign Team = Telesales
+Rules are configurable.
+No code deployment required.
+
+MODULE 17
+Bitrix Metadata Sync Engine
+Purpose:
+Automatically sync CRM configuration.
+Synchronizes:
+Users
+Teams
+Pipelines
+Stages
+Sources
+Custom Fields
+No hardcoded IDs.
+
+MODULE 18
+System Settings Engine
+Controls:
+Workflow Manager
+Assignment Method
+Business Hours
+Working Days
+SLA Profiles
+Escalation Profiles
+WhatsApp Templates
+
+MODULE 19
+Security Engine
+Features:
+JWT Authentication
+Role-Based Access
+Audit Logging
+Session Control
+HTTPS Enforcement
+
+MODULE 20
+AI Intelligence Layer (Future)
+Future Capabilities:
+Lead Scoring
+Lead Quality Analysis
+Agent Recommendation
+Conversion Prediction
+Smart Reassignment
+Not included in initial implementation.
+
+6. SYSTEM ARCHITECTURE
+Frontend
+React Vite Tailwind
+↓
+API Layer
+NestJS
+↓
+Domain Layer
+Assignment Engine Workflow Engine Reporting Engine Notification Engine
+↓
+Infrastructure Layer
+Bitrix Integration WhatsApp Integration Redis Queue Workers
+↓
+Data Layer
+PostgreSQL Prisma ORM
+
+7. DEVELOPMENT PRINCIPLES
+The system must never contain:
+Hardcoded User IDs
+Hardcoded Team Names
+Hardcoded Stage IDs
+Hardcoded Source IDs
+Hardcoded Pipelines
+All configuration must be stored in database and editable through dashboard.
+This ensures long-term maintainability and scalability.

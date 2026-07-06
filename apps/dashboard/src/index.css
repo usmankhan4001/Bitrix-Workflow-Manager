@@ -1,78 +1,131 @@
 @import "tailwindcss";
 
 @theme {
-  /* Bitrix24 Sidebar (dark) */
-  --color-b24-sidebar: #1a2332;
-  --color-b24-sidebar-hover: #243044;
-  --color-b24-sidebar-active: #2d3e54;
-  --color-b24-sidebar-text: #b8c5d4;
-  --color-b24-sidebar-text-muted: #6b7e94;
+  /* Bitrix24 Sidebar (glass-dark background) */
+  --color-b24-sidebar: rgba(26, 35, 50, 0.65);
+  --color-b24-sidebar-hover: rgba(255, 255, 255, 0.1);
+  --color-b24-sidebar-active: rgba(45, 188, 245, 0.25);
+  --color-b24-sidebar-text: #e2e8f0;
+  --color-b24-sidebar-text-muted: #94a3b8;
 
-  /* Bitrix24 Content Area (light) */
+  /* Bitrix24 Content Area (light glassy backdrops) */
   --color-b24-bg: #eef2f5;
-  --color-b24-surface: #ffffff;
-  --color-b24-surface2: #f7f9fb;
+  --color-b24-surface: rgba(255, 255, 255, 0.65);
+  --color-b24-surface2: rgba(255, 255, 255, 0.45);
 
   /* Bitrix24 Primary Colors */
   --color-b24-blue: #2dbcf5;
   --color-b24-blue-dark: #00aeef;
-  --color-b24-blue-light: #e8f7fd;
+  --color-b24-blue-light: rgba(45, 188, 245, 0.15);
   --color-b24-green: #75c900;
-  --color-b24-green-light: #f0f9e8;
+  --color-b24-green-light: rgba(117, 201, 0, 0.15);
   --color-b24-orange: #ff7e00;
+  --color-b24-orange-light: rgba(255, 126, 0, 0.15);
   --color-b24-red: #ff5752;
+  --color-b24-red-light: rgba(255, 87, 82, 0.15);
   --color-b24-yellow: #f5c400;
 
   /* Typography */
-  --color-b24-text: #333333;
-  --color-b24-text-muted: #828282;
-  --color-b24-text-light: #a8a8a8;
+  --color-b24-text: #1e293b;
+  --color-b24-text-muted: #64748b;
+  --color-b24-text-light: #94a3b8;
 
   /* Borders */
-  --color-b24-border: #dfe0e3;
-  --color-b24-border-light: #eceef0;
+  --color-b24-border: rgba(255, 255, 255, 0.45);
+  --color-b24-border-light: rgba(255, 255, 255, 0.25);
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 @layer base {
   body {
-    @apply bg-b24-bg text-b24-text font-sans antialiased;
+    background: linear-gradient(135deg, #cceeff 0%, #e0e8ff 45%, #fbe8ff 100%) !important;
+    background-attachment: fixed !important;
+    @apply text-b24-text font-sans antialiased min-h-screen;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-b24-blue text-white px-4 py-2 rounded font-medium text-sm transition-colors hover:bg-b24-blue-dark focus:outline-none focus:ring-2 focus:ring-b24-blue/40 cursor-pointer;
+    @apply bg-b24-blue text-white px-4 py-2 rounded font-medium text-sm transition-all hover:bg-b24-blue-dark shadow-sm hover:shadow active:scale-95 focus:outline-none cursor-pointer;
   }
   .btn-secondary {
-    @apply bg-white text-b24-text border border-b24-border px-4 py-2 rounded font-medium text-sm transition-colors hover:bg-b24-surface2 focus:outline-none cursor-pointer;
+    background: rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: blur(4px);
+    @apply text-b24-text border border-b24-border px-4 py-2 rounded font-medium text-sm transition-all hover:bg-white/80 shadow-sm active:scale-95 focus:outline-none cursor-pointer;
   }
   .btn-danger {
-    @apply bg-b24-red/10 text-b24-red border border-b24-red/30 px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-b24-red hover:text-white cursor-pointer;
+    @apply bg-b24-red/10 text-b24-red border border-b24-red/30 px-3 py-1.5 rounded text-xs font-semibold transition-all hover:bg-b24-red hover:text-white cursor-pointer;
   }
   .card {
-    @apply bg-b24-surface rounded-lg border border-b24-border shadow-sm;
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    border: 1px solid rgba(255, 255, 255, 0.45) !important;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06) !important;
+    border-radius: 12px !important;
   }
   .input-field {
-    @apply bg-white border border-b24-border rounded px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full;
+    background: rgba(255, 255, 255, 0.75) !important;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border-radius: 8px !important;
+    @apply px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full;
   }
   .select-field {
-    @apply bg-white border border-b24-border rounded px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full cursor-pointer;
+    background: rgba(255, 255, 255, 0.75) !important;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border-radius: 8px !important;
+    @apply px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full cursor-pointer;
   }
   .badge-active {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-b24-green-light text-b24-green;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-green-light text-b24-green border border-b24-green/20;
   }
   .badge-inactive {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-b24-red;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-red-light text-b24-red border border-b24-red/20;
   }
   .badge-pending {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 text-b24-yellow;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-orange-light text-b24-orange border border-b24-orange/20;
   }
   .page-header {
-    @apply bg-b24-surface border-b border-b24-border px-8 py-5;
+    background: rgba(255, 255, 255, 0.45) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+    @apply px-8 py-5;
   }
   .table-header {
-    @apply text-left text-xs font-semibold text-b24-text-muted uppercase tracking-wider bg-b24-surface2 border-b border-b24-border;
+    background: rgba(255, 255, 255, 0.35) !important;
+    @apply text-left text-xs font-semibold text-b24-text-muted uppercase tracking-wider border-b border-b24-border-light;
   }
+}
+
+/* Glassmorphism sidebar overrides */
+.bg-b24-sidebar {
+  background: rgba(26, 35, 50, 0.65) !important;
+  backdrop-filter: blur(16px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(130%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Background gradient visibility */
+.bg-b24-bg {
+  background: transparent !important;
+}
+
+/* Glassy Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }

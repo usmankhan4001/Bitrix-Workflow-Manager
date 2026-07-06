@@ -115,7 +115,7 @@ export class WorkflowController {
       leadId,
       team,
       creds ?? (this.workflowService as any).getWebhookCreds(),
-      false,
+      body.force === true || body.force === 'true',
     );
   }
 

@@ -229,6 +229,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
+  isSourceAllowed(sourceId: string, settings: Record<string, string>): boolean {
+    const allowedRaw = settings.ALLOWED_SOURCES || '[]';
+    let allowed: string[] = [];
+    try { allowed = JSON.parse(allowedRaw); } catch { return true; }
+    if (allowed.length === 0) return true;
+    if (!sourceId) return false;
+    return allowed.map((s) => s.toUpperCase()).includes(sourceId.toUpperCase());
+  }
+
   // ─── Bitrix24: Lead details ────────────────────────────────────────────────
 
   async fetchLeadDetails(leadId: string, creds: BitrixCreds): Promise<LeadDetails> {
@@ -362,18 +371,20 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   ): Promise<string | null> {
     try {
       const deadline = new Date(Date.now() + deadlineHours * 3600 * 1000).toISOString();
-      const body = new URLSearchParams({
-        'fields[TITLE]': titleOverride || `Follow up: ${leadName}`,
-        'fields[DESCRIPTION]': descriptionOverride || `Please contact ${leadName} and update the lead status in Bitrix24 within ${deadlineHours} hours.`,
-        'fields[RESPONSIBLE_ID]': assigneeUserId,
-        'fields[DEADLINE]': deadline,
-        'fields[UF_CRM_TASK]': `L_${leadId}`,
-      });
+      const body = new URLSearchParams();
+      body.append('fields[TITLE]', titleOverride || `Follow up: ${leadName}`);
+      body.append('fields[DESCRIPTION]', descriptionOverride || `Please contact ${leadName} and update the lead status in Bitrix24 within ${deadlineHours} hours.`);
+      body.append('fields[RESPONSIBLE_ID]', assigneeUserId);
+      body.append('fields[CREATED_BY]', assigneeUserId);
+      body.append('fields[DEADLINE]', deadline);
+      body.append('fields[UF_CRM_TASK][0]', `L_${leadId}`);
+      body.append('fields[ALLOW_CHANGE_DEADLINE]', 'N');
+
       if (creds.accessToken) body.append('auth', creds.accessToken);
       const res = await fetch(this.bitrixUrl('tasks.task.add', creds), { method: 'POST', body });
       const data = (await res.json()) as any;
       if (data.result?.task?.id) return String(data.result.task.id);
-      this.logger.warn(`createBitrixTask unexpected: ${JSON.stringify(data)}`);
+      this.logger.warn(`createBitrixTask unexpected response: ${JSON.stringify(data)}`);
       return null;
     } catch (err) {
       this.logger.error(`createBitrixTask failed: ${(err as Error).message}`);
@@ -445,10 +456,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     // Gap 3: Skip excluded sources
     const lead = await this.fetchLeadDetails(leadId, creds);
-    if (this.isSourceExcluded(lead.sourceId, settings)) {
+    if (!force && this.isSourceExcluded(lead.sourceId, settings)) {
       this.logger.log(`Lead #${leadId} skipped — source "${lead.sourceId}" is excluded`);
       await this.lateLead.updateMany({ where: { lead_id: leadId }, data: { processed: true, processed_at: new Date() } });
       return { success: true, skipped: true, message: `Source "${lead.sourceId}" is excluded` };
+    }
+    if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
+      this.logger.log(`Lead #${leadId} skipped — source "${lead.sourceId}" is not allowed`);
+      await this.lateLead.updateMany({ where: { lead_id: leadId }, data: { processed: true, processed_at: new Date() } });
+      return { success: true, skipped: true, message: `Source "${lead.sourceId}" is not allowed` };
     }
 
     const agent = await this.pickNextAgent(team);

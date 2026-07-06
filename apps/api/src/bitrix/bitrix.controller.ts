@@ -98,6 +98,17 @@ export class BitrixController {
     });
   }
 
+  @Get('webhook-sources')
+  async getWebhookSources(@Res() res: Response) {
+    const token = process.env.BITRIX_WEBHOOK_TOKEN;
+    const portal = process.env.BITRIX_PORTAL_URL || 'https://pcicrm.bitrix24.com';
+    if (!token) {
+      return res.status(400).json({ error: 'BITRIX_WEBHOOK_TOKEN not configured in .env' });
+    }
+    const sources = await this.bitrixService.getWebhookSources(token, portal);
+    return res.json({ sources });
+  }
+
   @Get('leads')
   async getLeads(
     @Query('access_token') accessToken: string,

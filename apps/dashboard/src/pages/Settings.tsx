@@ -151,10 +151,11 @@ const Settings: React.FC = () => {
   );
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--b24-bg)' }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div className="b24-navbar">
-        <h1 style={{ fontSize: 17, fontWeight: 700, color: 'var(--b24-text)' }}>Settings</h1>
+        <h1 style={{ fontSize: 16, fontWeight: 700, color: 'var(--b24-text)' }}>Settings</h1>
       </div>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
 
       {toast && (
         <div style={{ position: 'fixed', top: 18, right: 18, zIndex: 100, padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, background: toast.type === 'success' ? 'var(--b24-green-dim)' : 'var(--b24-red-dim)', border: `1px solid ${toast.type === 'success' ? 'var(--b24-green-ring)' : 'var(--b24-red-ring)'}`, color: toast.type === 'success' ? 'var(--b24-green)' : 'var(--b24-red)', boxShadow: '0 4px 16px rgba(0,0,0,0.3)' }}>
@@ -162,7 +163,10 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 820 }}>
+      <div className="b24-two-col" style={{ alignItems: 'start' }}>
+
+        {/* LEFT column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Business Hours */}
         <Section
@@ -213,6 +217,11 @@ const Settings: React.FC = () => {
             </button>
           </div>
         </Section>
+
+        </div>{/* end LEFT */}
+
+        {/* RIGHT column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Escalation Manager */}
         <Section
@@ -280,7 +289,10 @@ const Settings: React.FC = () => {
           />
         </Section>
 
-      </div>
+        </div>{/* end RIGHT */}
+
+      </div>{/* end two-col */}
+      </div>{/* end scroll */}
     </div>
   );
 };

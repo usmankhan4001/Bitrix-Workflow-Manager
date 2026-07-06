@@ -165,6 +165,7 @@ const MemberRow: React.FC<{
 const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ onAdded, existingIds }) => {
   const [users, setUsers] = useState<BitrixUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usersError, setUsersError] = useState('');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState('');
   const [team, setTeam] = useState(TEAMS[0]);
@@ -174,9 +175,13 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
 
   useEffect(() => {
     fetch(`${API()}/api/bitrix/webhook-users`)
-      .then(r => r.ok ? r.json() : { users: [] })
-      .then(d => setUsers(d.users || []))
-      .catch(() => {})
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+        return data;
+      })
+      .then(d => { setUsers(d.users || []); setUsersError(''); })
+      .catch(e => setUsersError(e.message || 'Failed to load users'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -242,8 +247,13 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
               Person
             </label>
             {loading ? (
-              <div className="b24-input" style={{ display: 'flex', alignItems: 'center', color: 'var(--b24-text-faint)', fontSize: 12 }}>
+              <div className="b24-input" style={{ display: 'flex', alignItems: 'center', color: 'var(--b24-text-faint)', fontSize: 12, gap: 6 }}>
+                <svg className="b24-spin" width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/><path fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
                 Loading users…
+              </div>
+            ) : usersError ? (
+              <div style={{ padding: '8px 10px', borderRadius: 6, background: 'var(--b24-red-dim)', border: '1px solid var(--b24-red-ring)', fontSize: 11, color: 'var(--b24-red)' }}>
+                ⚠ {usersError}
               </div>
             ) : (
               <>

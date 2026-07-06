@@ -193,8 +193,8 @@ const Notifications: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
                 {[
                   {
-                    label: 'New Lead Assigned',
-                    desc: 'Fires immediately when a lead is assigned to a salesperson (round-robin, or the existing owner for a repeat customer).',
+                    label: 'Lead Assigned',
+                    desc: 'Fires when a lead is assigned to someone — a rep (round-robin), the Escalation Manager (out-of-hours / duplicate / no agent), or a rep after the manager reassigns.',
                     params: 'Agent name  ·  Lead name  ·  Contact number  ·  Time to complete',
                     color: 'var(--b24-green)',
                   },

@@ -121,6 +121,15 @@ export class WorkflowController {
     return this.workflowService.clearQueue();
   }
 
+  // ─── Bitrix24 Inbound Webhook (Lead Change) ───────────────────────────────
+  // Fired on lead update. When the Escalation Manager reassigns a lead to a rep,
+  // this restarts the follow-up workflow (task + WhatsApp) for that rep.
+
+  @Post('webhook/lead-change')
+  async leadChangeWebhook(@Body() payload: any) {
+    return this.workflowService.handleLeadChangeWebhook(payload);
+  }
+
   // ─── WhatsApp ─────────────────────────────────────────────────────────────
 
   @Get('chat/:phone')

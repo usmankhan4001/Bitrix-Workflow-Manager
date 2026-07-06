@@ -79,11 +79,13 @@ const EscalationDiagram: React.FC = () => (
     </p>
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap', rowGap: 8 }}>
       {[
-        { label: 'Lead arrives', sub: 'Fresh lead → next agent in rotation', color: 'var(--b24-primary-dim)', border: 'var(--b24-primary-ring)', text: 'var(--b24-primary)' },
+        { label: 'Fresh lead (in hours)', sub: 'Round-robin → next agent', color: 'var(--b24-primary-dim)', border: 'var(--b24-primary-ring)', text: 'var(--b24-primary)' },
         { arrow: true },
-        { label: 'Repeat customer', sub: 'Goes to the rep who already owns them', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
+        { label: 'Can\'t auto-assign', sub: 'Out-of-hours, duplicate, or no agent', color: 'rgba(224,152,0,0.1)', border: 'rgba(224,152,0,0.3)', text: '#e09800' },
         { arrow: true },
-        { label: 'Escalation Manager', sub: 'No active agents, or owner has left', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
+        { label: 'Escalation Manager', sub: 'Reviews & sets responsible person', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
+        { arrow: true },
+        { label: 'Workflow restarts', sub: 'New rep gets task + WhatsApp', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
       ].map((item: any, i) => item.arrow
         ? <span key={i} style={{ color: 'var(--b24-text-faint)', margin: '0 6px', fontSize: 16 }}>→</span>
         : (

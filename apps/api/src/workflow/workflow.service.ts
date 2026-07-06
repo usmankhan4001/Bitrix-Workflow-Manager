@@ -284,13 +284,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
-  // ─── Duplicate detection & sticky ownership ────────────────────────────────
+  // ─── Duplicate detection ───────────────────────────────────────────────────
   // The same customer often enters Bitrix as several leads from different sources
-  // (e.g. Website + CRM form). To prevent two reps fighting over one customer, a
-  // duplicate is routed to the rep who ALREADY owns that customer (sticky
-  // ownership). If that owner is inactive/unknown, it goes to the Escalation
-  // Manager. Matching is by phone or email (Bitrix's own repeat flag is ignored —
-  // the app stays in control).
+  // (e.g. Website + CRM form). A duplicate (matched by phone or email) is routed to
+  // the Escalation Manager so a human decides who handles it — it is never
+  // round-robined to a second rep.
 
   // Ask Bitrix for other lead IDs that share this phone/email (excludes the lead itself).
   private async findDuplicateLeadIds(
@@ -321,31 +319,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return [...matches];
   }
 
-  // Given the existing duplicate lead IDs, find the ACTIVE agent who owns the
-  // customer. Prefers our own assignment log (most recent), then falls back to the
-  // existing lead's Bitrix ASSIGNED_BY_ID. Returns null if no active owner found.
-  private async resolveDuplicateOwner(dupLeadIds: string[], creds: BitrixCreds): Promise<any | null> {
-    // 1) Our assignment log — who did WE assign these duplicate leads to?
-    const logs = await this.assignmentLog.findMany({
-      where: { lead_id: { in: dupLeadIds } },
-      orderBy: { assigned_at: 'desc' },
-    });
-    for (const log of logs) {
-      const agent = await this.agent.findUnique({ where: { id: log.agent_id } });
-      if (agent && agent.is_active) return agent;
-    }
-
-    // 2) Fall back to the existing lead's responsible person in Bitrix
-    for (const dupId of dupLeadIds) {
-      const dupLead = await this.fetchLeadDetails(dupId, creds);
-      if (dupLead.assignedById) {
-        const agent = await this.agent.findFirst({ where: { bitrix_user_id: dupLead.assignedById } });
-        if (agent && agent.is_active) return agent;
-      }
-    }
-
-    return null;
-  }
 
   // ─── Bitrix24: Mutations ───────────────────────────────────────────────────
 
@@ -461,104 +434,131 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         }
       }
 
-      // Gap 2: Queue leads arriving outside business hours if not forced
-      if (!force && !this.isWithinBusinessHours(settings)) {
-        this.logger.log(`Lead #${cleanLeadId} arrived outside business hours. Queueing in LateLead...`);
-        await this.storeLateLeadIfAbsent(cleanLeadId);
-        return { success: true, queued: true, message: 'Outside business hours, lead queued.' };
-      }
+      // Fetch lead details up front — needed for routing and escalation messaging.
+      const lead = await this.fetchLeadDetails(cleanLeadId, creds);
 
       // Skip sources outside the allow-list (empty list = all allowed)
-      const lead = await this.fetchLeadDetails(cleanLeadId, creds);
       if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
         this.logger.log(`Lead #${cleanLeadId} skipped — source "${lead.sourceId}" is not allowed`);
-        await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
         return { success: true, skipped: true, message: `Source "${lead.sourceId}" is not allowed` };
       }
 
       const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
 
-      // Decide who receives the lead.
-      let agent: any = targetAgent;
-      let assignReason = 'round-robin';
-      let duplicateOf: string[] = [];
+      // Directed re-assignment (e.g. the Escalation Manager picked a rep) — assign
+      // straight to that agent and (re)start their follow-up workflow.
+      if (targetAgent) {
+        return this.assignToAgent(cleanLeadId, lead, targetAgent, team, slaHours, settings, creds, 'manager reassignment');
+      }
 
-      if (!agent && !force) {
-        // Duplicate? (same customer by phone/email) → sticky ownership.
-        duplicateOf = await this.findDuplicateLeadIds(cleanLeadId, lead.phone || '', lead.email || '', creds);
+      // ── Routing — the Escalation Manager is the catch-all. Anything that can't be
+      // cleanly round-robin assigned to an active agent goes to the Manager. ──
+
+      // Out of business hours → Manager immediately.
+      if (!force && !this.isWithinBusinessHours(settings)) {
+        return this.escalateToManager(cleanLeadId, lead, team, slaHours, 'arrived outside business hours', settings, creds);
+      }
+
+      // Duplicate (same customer by phone/email) → Manager.
+      if (!force) {
+        const duplicateOf = await this.findDuplicateLeadIds(cleanLeadId, lead.phone || '', lead.email || '', creds);
         if (duplicateOf.length > 0) {
-          agent = await this.resolveDuplicateOwner(duplicateOf, creds);
-          assignReason = agent
-            ? `duplicate of lead(s) ${duplicateOf.join(', ')} → existing owner ${agent.name}`
-            : `duplicate of lead(s) ${duplicateOf.join(', ')} → owner inactive/unknown`;
+          return this.escalateToManager(cleanLeadId, lead, team, slaHours, `duplicate of lead(s) ${duplicateOf.join(', ')}`, settings, creds);
         }
       }
 
-      // Fresh lead → normal round-robin.
-      if (!agent && duplicateOf.length === 0) {
-        agent = await this.pickNextAgent(team);
-      }
-
-      // Manager fallback: no active agents, OR a duplicate whose owner is gone.
+      // Fresh lead → round-robin to the next active agent.
+      const agent = await this.pickNextAgent(team);
       if (!agent) {
-        const managerId = settings.WORKFLOW_MANAGER_ID || '1';
-        const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
-        const isDup = duplicateOf.length > 0;
-        const reason = isDup ? assignReason : `no active agents in team "${team}"`;
-        this.logger.warn(`Lead #${cleanLeadId} ("${lead.name}") → Escalation Manager (${reason})`);
-
-        const title = isDup ? `⚠️ Duplicate lead — review: ${lead.name}` : `⚠️ No agent available: ${lead.name}`;
-        const desc = isDup
-          ? `Lead "${lead.name}" is a duplicate of ${duplicateOf.join(', ')} but its previous owner is inactive/unknown. Please review, merge, or assign.`
-          : `No active sales agent was available in team "${team}" to take lead "${lead.name}". Please assign it manually.`;
-
-        const [, mgrTaskId] = await Promise.all([
-          this.assignLeadInBitrix(cleanLeadId, managerId, creds),
-          this.createBitrixTask(cleanLeadId, lead.name, managerId, creds, slaHours, title, desc),
-        ]);
-
-        const mlog = await this.assignmentLog.create({
-          data: { lead_id: cleanLeadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
-        });
-        await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
-
-        if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
-          const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours);
-          if (ok) await this.assignmentLog.update({ where: { id: mlog.id }, data: { wa_notified: true } });
-        }
-
-        return { success: true, agent: manager, taskId: mgrTaskId, message: reason };
+        return this.escalateToManager(cleanLeadId, lead, team, slaHours, `no active agents in team "${team}"`, settings, creds);
       }
 
-      // Assign to the chosen agent (round-robin or sticky-ownership owner).
-      const [, taskId] = await Promise.all([
-        this.assignLeadInBitrix(cleanLeadId, agent.bitrix_user_id, creds),
-        this.createBitrixTask(cleanLeadId, lead.name, agent.bitrix_user_id, creds, slaHours),
-      ]);
-
-      const log = await this.assignmentLog.create({
-        data: { lead_id: cleanLeadId, agent_id: agent.id, agent_name: agent.name, team },
-      });
-
-      await this.lateLead.updateMany({
-        where: { lead_id: cleanLeadId },
-        data: { processed: true, processed_at: new Date() },
-      });
-
-      // WhatsApp notification
-      let waNotified = false;
-      if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
-        waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours);
-        if (waNotified) {
-          await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
-        }
-      }
-
-      this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${assignReason}). Task: ${taskId}. WA: ${waNotified}`);
-      return { success: true, agent, taskId };
+      return this.assignToAgent(cleanLeadId, lead, agent, team, slaHours, settings, creds, 'round-robin');
     } finally {
       this.activeAssignments.delete(cleanLeadId);
     }
+  }
+
+  // Assign a lead to a specific agent: update Bitrix, create the follow-up task,
+  // log it, and send the WhatsApp alert. Used for round-robin and manager reassigns.
+  private async assignToAgent(
+    leadId: string, lead: LeadDetails, agent: any, team: string,
+    slaHours: number, settings: Record<string, string>, creds: BitrixCreds, reason: string,
+  ): Promise<any> {
+    const [, taskId] = await Promise.all([
+      this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds),
+      this.createBitrixTask(leadId, lead.name, agent.bitrix_user_id, creds, slaHours),
+    ]);
+    const log = await this.assignmentLog.create({
+      data: { lead_id: leadId, agent_id: agent.id || 'manual-assignee', agent_name: agent.name, team },
+    });
+    let waNotified = false;
+    if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
+      waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours);
+      if (waNotified) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
+    }
+    this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${reason}). Task: ${taskId}. WA: ${waNotified}`);
+    return { success: true, agent, taskId };
+  }
+
+  // Route a lead to the Escalation Manager (out-of-hours, duplicate, or no agent).
+  // The manager then sets the responsible person, which restarts the workflow via
+  // handleLeadChangeWebhook.
+  private async escalateToManager(
+    leadId: string, lead: LeadDetails, team: string, slaHours: number,
+    reason: string, settings: Record<string, string>, creds: BitrixCreds,
+  ): Promise<any> {
+    const managerId = settings.WORKFLOW_MANAGER_ID || '1';
+    const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
+    this.logger.warn(`Lead #${leadId} ("${lead.name}") → Escalation Manager (${reason})`);
+
+    const [, taskId] = await Promise.all([
+      this.assignLeadInBitrix(leadId, managerId, creds),
+      this.createBitrixTask(
+        leadId, lead.name, managerId, creds, slaHours,
+        `⚠️ Needs assignment: ${lead.name}`,
+        `Lead "${lead.name}" (${lead.phone || 'no phone'}) ${reason}. Set the responsible person — the follow-up workflow starts automatically for them.`,
+      ),
+    ]);
+    const log = await this.assignmentLog.create({
+      data: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
+    });
+    if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
+      const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours);
+      if (ok) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
+    }
+    return { success: true, agent: manager, taskId, message: reason };
+  }
+
+  // ─── Manager reassignment → restart the workflow for the new rep ───────────
+  // Fired by a Bitrix outbound webhook on lead update. When the Escalation Manager
+  // changes the responsible person to someone else, we (re)start the follow-up
+  // workflow (task + WhatsApp) for that new rep.
+  async handleLeadChangeWebhook(payload: any): Promise<{ action: string; detail?: string }> {
+    const settings = await this.getSettings();
+    const creds = this.getWebhookCreds();
+
+    const leadId = payload?.data?.FIELDS?.ID || payload?.FIELDS?.ID || payload?.lead_id || '';
+    if (!leadId) return { action: 'ignored', detail: 'No lead ID in payload' };
+
+    const lead = await this.fetchLeadDetails(String(leadId), creds);
+    const managerId = settings.WORKFLOW_MANAGER_ID || '1';
+
+    // Only react when the Escalation Manager handed the lead to a different person.
+    if (lead.modifyById === managerId && lead.assignedById && lead.assignedById !== managerId) {
+      const repAgent = await this.agent.findFirst({ where: { bitrix_user_id: lead.assignedById } });
+      const team = repAgent?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+      const targetAgent = repAgent || {
+        id: 'manual-assignee', bitrix_user_id: lead.assignedById,
+        name: `Bitrix User #${lead.assignedById}`, whatsapp_phone: null, team,
+      };
+
+      this.logger.log(`Manager reassigned lead #${leadId} → ${targetAgent.name}. Restarting workflow.`);
+      await this.processLeadAssignment(String(leadId), team, creds, true, targetAgent);
+      return { action: 'restarted', detail: `Workflow restarted for ${targetAgent.name}` };
+    }
+
+    return { action: 'ignored', detail: 'Not a manager reassignment' };
   }
 
   // ─── GAP 1: Cron — Process all queued late leads ──────────────────────────

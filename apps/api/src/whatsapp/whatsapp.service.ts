@@ -21,22 +21,24 @@ export class WhatsappService {
     return this.cachedTemplates;
   }
 
-  async hasDynamicUrlButton(templateName: string): Promise<boolean> {
+  async getDynamicUrlButtonIndex(templateName: string): Promise<string | null> {
     try {
       const templates = await this.getCachedTemplates();
       const template = templates.find(t => t.name === templateName);
-      if (!template) return false;
+      if (!template) return null;
       const components = JSON.parse(template.components || '[]');
       const buttonsComponent = components.find((c: any) => String(c.type).toUpperCase() === 'BUTTONS');
-      if (!buttonsComponent || !Array.isArray(buttonsComponent.buttons)) return false;
-      return buttonsComponent.buttons.some((b: any) => 
+      if (!buttonsComponent || !Array.isArray(buttonsComponent.buttons)) return null;
+      
+      const idx = buttonsComponent.buttons.findIndex((b: any) => 
         String(b.type).toUpperCase() === 'URL' && 
         b.url && 
         b.url.includes('{{1}}')
       );
+      return idx !== -1 ? String(idx) : null;
     } catch (err) {
-      this.logger.warn(`hasDynamicUrlButton check failed for ${templateName}: ${(err as Error).message}`);
-      return false;
+      this.logger.warn(`getDynamicUrlButtonIndex failed for ${templateName}: ${(err as Error).message}`);
+      return null;
     }
   }
 
@@ -69,14 +71,14 @@ export class WhatsappService {
     ];
 
     if (buttonUrlParam) {
-      const hasBtn = await this.hasDynamicUrlButton(templateName);
-      if (hasBtn) {
+      const btnIdx = await this.getDynamicUrlButtonIndex(templateName);
+      if (btnIdx !== null) {
         const normalizedButtonParam = buttonUrlParam.replace(/[^\d]/g, '');
         if (normalizedButtonParam) {
           components.push({
             type: 'button',
             sub_type: 'url',
-            index: '0',
+            index: btnIdx,
             parameters: [
               {
                 type: 'text',

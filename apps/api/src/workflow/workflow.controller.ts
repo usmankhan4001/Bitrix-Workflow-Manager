@@ -149,7 +149,8 @@ export class WorkflowController {
   @Get('chat/:phone')
   @Redirect('https://wa.me', 302)
   redirectWhatsApp(@Param('phone') phone: string) {
-    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const match = phone.match(/(\d{9,15})$/);
+    const cleanPhone = match ? match[1] : phone.replace(/[^\d]/g, '');
     return { url: `https://wa.me/${cleanPhone}` };
   }
 

@@ -12,7 +12,9 @@ model Agent {
   id              String   @id @default(uuid())
   bitrix_user_id  String   @unique
   name            String
-  team            String   @default("Sales Executives")
+  team            String   @default("B2C")
+  department_id   String?
+  department_name String?
   whatsapp_phone  String?
   is_active       Boolean  @default(true)
   sort_order      Int      @default(0)

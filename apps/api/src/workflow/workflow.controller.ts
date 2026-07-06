@@ -15,7 +15,7 @@ export class WorkflowController {
   getAgents() { return this.workflowService.getAgents(); }
 
   @Post('agents')
-  addAgent(@Body() body: { bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string }) {
+  addAgent(@Body() body: { bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string; department_id?: string; department_name?: string }) {
     return this.workflowService.addAgent(body);
   }
 
@@ -26,7 +26,7 @@ export class WorkflowController {
   }
 
   @Put('agents/:id')
-  updateAgent(@Param('id') id: string, @Body() body: { name?: string; team?: string; whatsapp_phone?: string }) {
+  updateAgent(@Param('id') id: string, @Body() body: { name?: string; team?: string; whatsapp_phone?: string; department_id?: string; department_name?: string }) {
     return this.workflowService.updateAgent(id, body);
   }
 
@@ -91,18 +91,23 @@ export class WorkflowController {
   @Post('assign-lead')
   async assignLead(@Body() body: any) {
     const leadId = body.lead_id || body.data?.FIELDS?.ID;
-    const team = body.team || 'Sales Executives';
 
-    // Use OAuth creds if provided, fall back to server-side webhook token
+    // Use body team if provided, otherwise read from settings so it's configurable
+    let team = body.team;
+    if (!team) {
+      const settings = await this.workflowService.getSettings();
+      team = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+    }
+
     const creds = body.access_token && body.domain
       ? { accessToken: body.access_token, domain: body.domain }
-      : undefined; // WorkflowService will use webhook creds as fallback
+      : undefined;
 
     return this.workflowService.processLeadAssignment(
       leadId,
       team,
       creds ?? (this.workflowService as any).getWebhookCreds(),
-      false, // do not force, check working hours
+      false,
     );
   }
 

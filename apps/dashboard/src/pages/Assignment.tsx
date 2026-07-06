@@ -17,10 +17,11 @@ interface Agent {
 }
 interface BitrixUser {
   id: string; name: string; email: string;
-  department_name: string; phone: string; active: boolean;
+  department_id: string | null; department_name: string; phone: string; active: boolean;
 }
+interface BitrixDept { id: string; name: string; }
 
-const TEAMS = ['Sales Executives', 'Telly Sales', 'B2B', 'B2C', 'Marketing'];
+const TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
 const AVATAR_COLORS = ['#1587fa','#1cae6a','#e09800','#9b59b6','#e74c3c','#1abc9c','#e67e22'];
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 
@@ -164,9 +165,11 @@ const MemberRow: React.FC<{
 // ── Add Person Panel (right column) ──────────────────────────────────────────
 const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ onAdded, existingIds }) => {
   const [users, setUsers] = useState<BitrixUser[]>([]);
+  const [departments, setDepartments] = useState<BitrixDept[]>([]);
   const [loading, setLoading] = useState(true);
   const [usersError, setUsersError] = useState('');
   const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
   const [selected, setSelected] = useState('');
   const [team, setTeam] = useState(TEAMS[0]);
   const [phone, setPhone] = useState('');
@@ -180,16 +183,29 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
         if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
         return data;
       })
-      .then(d => { setUsers(d.users || []); setUsersError(''); })
+      .then(d => {
+        setUsers(d.users || []);
+        setDepartments(d.departments || []);
+        // Pre-select the first dept that looks like B2C/sales if available
+        const b2cDept = (d.departments || []).find((dep: BitrixDept) =>
+          dep.name.toLowerCase().includes('b2c') || dep.name.toLowerCase().includes('b 2 c')
+        );
+        if (b2cDept) setDeptFilter(b2cDept.id);
+        setUsersError('');
+      })
       .catch(e => setUsersError(e.message || 'Failed to load users'))
       .finally(() => setLoading(false));
   }, []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return users.filter(u => u.active && !existingIds.includes(u.id) &&
-      (u.name.toLowerCase().includes(q) || u.department_name?.toLowerCase().includes(q)));
-  }, [users, search, existingIds]);
+    return users.filter(u =>
+      u.active &&
+      !existingIds.includes(u.id) &&
+      (u.name.toLowerCase().includes(q) || u.department_name?.toLowerCase().includes(q)) &&
+      (!deptFilter || u.department_id === deptFilter)
+    );
+  }, [users, search, existingIds, deptFilter]);
 
   const grouped = useMemo(() => {
     const g: Record<string, BitrixUser[]> = {};
@@ -210,7 +226,14 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
       await fetch(`${API()}/api/workflow/agents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bitrix_user_id: selected, name: selectedUser.name, team, whatsapp_phone: phone || undefined }),
+        body: JSON.stringify({
+          bitrix_user_id: selected,
+          name: selectedUser.name,
+          team,
+          whatsapp_phone: phone || undefined,
+          department_id: selectedUser.department_id || undefined,
+          department_name: selectedUser.department_name || undefined,
+        }),
       });
       setSelected(''); setPhone(''); setSearch('');
       setSuccess(true); setTimeout(() => setSuccess(false), 2000);
@@ -257,7 +280,23 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
               </div>
             ) : (
               <>
-                <input className="b24-input" style={{ marginBottom: 6 }} placeholder="Search name or department…" value={search} onChange={e => setSearch(e.target.value)} />
+                {departments.length > 0 && (
+                  <select
+                    className="b24-select"
+                    style={{ marginBottom: 6 }}
+                    value={deptFilter}
+                    onChange={e => { setDeptFilter(e.target.value); setSelected(''); }}
+                  >
+                    <option value="">All departments ({users.filter(u => u.active && !existingIds.includes(u.id)).length})</option>
+                    {departments.map(d => {
+                      const count = users.filter(u => u.active && !existingIds.includes(u.id) && u.department_id === d.id).length;
+                      return (
+                        <option key={d.id} value={d.id}>{d.name} ({count})</option>
+                      );
+                    })}
+                  </select>
+                )}
+                <input className="b24-input" style={{ marginBottom: 6 }} placeholder="Search name…" value={search} onChange={e => setSearch(e.target.value)} />
                 <select className="b24-select" value={selected} onChange={e => { setSelected(e.target.value); const u = users.find(u => u.id === e.target.value); if (u?.phone) setPhone(u.phone); }}>
                   <option value="">— Choose a person —</option>
                   {Object.entries(grouped).map(([dept, us]) => (

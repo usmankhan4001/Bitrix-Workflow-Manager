@@ -106,7 +106,7 @@ const Notifications: React.FC = () => {
   );
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--b24-bg)' }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}><div style={{ flex: 1, overflowY: 'auto' }}>
       <div className="b24-navbar">
         <h1 style={{ fontSize: 17, fontWeight: 700, color: 'var(--b24-text)' }}>Notifications</h1>
         <span className={`b24-badge b24-badge-${waEnabled ? 'success' : 'neutral'}`}>
@@ -120,7 +120,7 @@ const Notifications: React.FC = () => {
         </div>
       )}
 
-      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 820 }}>
+      <div className="b24-two-col" style={{ alignItems: 'start' }}><div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* What is this? */}
         <div style={{ background: 'var(--b24-card)', border: '1px solid var(--b24-divider)', borderRadius: 10, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -255,7 +255,38 @@ const Notifications: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+        </div>{/* end left col */}
+
+        {/* RIGHT — test + triggers */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 0 }}>
+          <div className="b24-card" style={{ padding: '16px' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 4 }}>Test Connection</p>
+            <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', marginBottom: 12 }}>Verify your OnCloud API token is working before enabling for your team.</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input type="text" className="b24-input" style={{ fontFamily: 'monospace', fontSize: 12 }} placeholder="Phone number (optional)" />
+            </div>
+            <button className="b24-btn b24-btn-secondary" style={{ width: '100%', justifyContent: 'center' }}>Send test message</button>
+          </div>
+          <div className="b24-card" style={{ padding: '16px' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 12 }}>What triggers a WhatsApp message?</p>
+            {[
+              { label: 'New Lead Assigned', desc: 'Fires immediately when a lead is assigned.', color: 'var(--b24-green)' },
+              { label: 'SLA Overdue', desc: 'Fires when the deadline passes and lead is still open.', color: 'var(--b24-orange)' },
+            ].map(item => (
+              <div key={item.label} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--b24-divider-light)' }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0, marginTop: 4 }} />
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 2 }}>{item.label}</p>
+                  <p style={{ fontSize: 11, color: 'var(--b24-text-muted)' }}>{item.desc}</p>
+                  <p style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--b24-primary)', marginTop: 3 }}>name · lead · source</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>{/* end right col */}
+
+      </div>{/* end two-col */}
+      </div>{/* end scroll */}
     </div>
   );
 };

@@ -6,13 +6,12 @@ BitrixFlow is a custom, external **Sales Operations & Lead Distribution Platform
 
 ## 1. System Architecture
 
-BitrixFlow splits responsibilities clearly between the primary CRM workspace and the workflow automation engine:
-*   **System of Record**: Bitrix24 remains the source of truth for leads, contacts, deals, and activities.
-*   **Automation Engine**: BitrixFlow handles lead assignments, business hours guards, SLA tracking, and notifications.
-*   **No Hardcoding**: All agent lists, routing teams, working hours, and SLA rules are configured dynamically in the database and managed via the dashboard UI.
+## 🏗️ Architecture
+
+The system splits responsibilities between the primary CRM workspace and the workflow automation engine. Bitrix24 remains the system of record, while BitrixFlow executes the rules.
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph Client CRM
         B24[Bitrix24 CRM]
     end
@@ -20,11 +19,11 @@ graph TD
     subgraph BitrixFlow Platform
         UI[React Vite Dashboard]
         API[NestJS API Server]
-        DB[(PostgreSQL / SQLite)]
+        DB[(PostgreSQL)]
     end
     
     subgraph External Integrations
-        WA[WhatsApp Provider <br/> OnCloud API]
+        WA[WhatsApp Provider API]
     end
 
     B24 <-->|OAuth / Webhooks| API
@@ -35,9 +34,7 @@ graph TD
 
 ---
 
-## 2. Lead Journey & SLA Workflow
-
-The diagram below outlines the path of an incoming lead through the working hours guard, round-robin assignment, SLA monitoring, and escalation:
+## ⚡ Lead Journey & Workflow
 
 ```mermaid
 flowchart TD

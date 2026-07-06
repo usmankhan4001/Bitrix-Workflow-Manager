@@ -14,6 +14,7 @@ model Agent {
   team            String   @default("Sales Executives")
   whatsapp_phone  String?
   is_active       Boolean  @default(true)
+  sort_order      Int      @default(0)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 }

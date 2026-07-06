@@ -86,7 +86,14 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // ─── Agents ────────────────────────────────────────────────────────────────
 
   async getAgents() {
-    return this.agent.findMany({ orderBy: { created_at: 'asc' } });
+    return this.agent.findMany({ orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }] });
+  }
+
+  async reorderAgents(orderedIds: string[]) {
+    await Promise.all(
+      orderedIds.map((id, index) => this.agent.update({ where: { id }, data: { sort_order: index } }))
+    );
+    return this.getAgents();
   }
 
   async addAgent(data: { bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string }) {
@@ -375,7 +382,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   async pickNextAgent(team: string): Promise<any | null> {
     const agents = await this.agent.findMany({
       where: { team, is_active: true },
-      orderBy: { created_at: 'asc' },
+      orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
     });
     if (agents.length === 0) return null;
 

@@ -19,6 +19,12 @@ export class WorkflowController {
     return this.workflowService.addAgent(body);
   }
 
+  // IMPORTANT: reorder must come BEFORE :id routes so NestJS doesn't match "reorder" as an ID
+  @Put('agents/reorder')
+  reorderAgents(@Body('orderedIds') orderedIds: string[]) {
+    return this.workflowService.reorderAgents(orderedIds);
+  }
+
   @Put('agents/:id')
   updateAgent(@Param('id') id: string, @Body() body: { name?: string; team?: string; whatsapp_phone?: string }) {
     return this.workflowService.updateAgent(id, body);

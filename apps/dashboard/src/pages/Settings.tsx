@@ -75,17 +75,15 @@ const SaveBtn: React.FC<{ onClick: () => void; saving: boolean }> = ({ onClick, 
 const EscalationDiagram: React.FC = () => (
   <div style={{ padding: '0 0 14px 0', borderBottom: '1px solid var(--b24-divider-light)' }}>
     <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--b24-text-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px 0' }}>
-      How escalation works
+      How assignment works
     </p>
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap', rowGap: 8 }}>
       {[
-        { label: 'Lead arrives', sub: 'Auto-assigned to next agent', color: 'var(--b24-primary-dim)', border: 'var(--b24-primary-ring)', text: 'var(--b24-primary)' },
+        { label: 'Lead arrives', sub: 'Fresh lead → next agent in rotation', color: 'var(--b24-primary-dim)', border: 'var(--b24-primary-ring)', text: 'var(--b24-primary)' },
         { arrow: true },
-        { label: 'SLA expires', sub: 'Agent didn\'t handle it in time', color: 'rgba(224,152,0,0.1)', border: 'rgba(224,152,0,0.3)', text: '#e09800' },
+        { label: 'Repeat customer', sub: 'Goes to the rep who already owns them', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
         { arrow: true },
-        { label: 'Escalation Manager', sub: 'Lead reassigned to them', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
-        { arrow: true },
-        { label: 'Manager reassigns', sub: 'New agent gets a fresh task', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
+        { label: 'Escalation Manager', sub: 'No active agents, or owner has left', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
       ].map((item: any, i) => item.arrow
         ? <span key={i} style={{ color: 'var(--b24-text-faint)', margin: '0 6px', fontSize: 16 }}>→</span>
         : (
@@ -261,8 +259,8 @@ const Settings: React.FC = () => {
             />
             <FormRow
               label="SLA Hours"
-              desc="How many hours an agent has to act on a lead before it's flagged as overdue."
-              tip="If an agent hasn't updated or resolved a lead within this many hours, the system sends an overdue WhatsApp alert and may escalate it to the manager."
+              desc="How many hours an agent has to follow up. Sets the Bitrix task deadline and the 'complete within' time shown in the WhatsApp alert."
+              tip="The follow-up task created in Bitrix gets a deadline this many hours from assignment, and the agent's WhatsApp message tells them to complete it within this window."
               right={<><input type="number" min={1} max={168} value={settings.SLA_HOURS || '24'} onChange={e => setSettings(s => ({ ...s, SLA_HOURS: e.target.value }))} className="b24-input" style={{ width: 72, textAlign: 'center' }} /><span style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginRight: 8 }}>hours</span><SaveBtn onClick={() => save('SLA_HOURS', settings.SLA_HOURS || '24')} saving={saving === 'SLA_HOURS'} /></>}
             />
           </Section>
@@ -407,14 +405,14 @@ const Settings: React.FC = () => {
           <Section
             icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>}
             title="Escalation & Assignment Rules"
-            desc="What happens when a lead isn't handled in time"
+            desc="Where a lead goes when it can't be auto-assigned"
           >
             <EscalationDiagram />
 
             <FormRow
               label="Escalation Manager"
               desc={managerName ? `Currently: ${managerName}` : 'No manager selected yet'}
-              tip="When a lead is overdue and has too many open tasks, it gets automatically reassigned to this person. They can then hand it off to someone on the team."
+              tip="A lead is sent to this person when no active sales agent is available, or when a repeat customer's original rep has left/been deactivated. They can then assign it manually."
               right={
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {bitrixUsers.length > 0
@@ -442,13 +440,6 @@ const Settings: React.FC = () => {
                   <SaveBtn onClick={() => save('WORKFLOW_MANAGER_ID', settings.WORKFLOW_MANAGER_ID || '')} saving={saving === 'WORKFLOW_MANAGER_ID'} />
                 </div>
               }
-            />
-
-            <FormRow
-              label="Max open tasks before escalating"
-              desc="If a lead already has this many unresolved tasks, it gets sent straight to the manager."
-              tip="Example: if set to 2, and a lead already has 2 open tasks without being resolved, it skips the agent queue and goes to the Escalation Manager directly."
-              right={<><input type="number" min={1} max={10} className="b24-input" style={{ width: 72, textAlign: 'center' }} value={settings.MAX_TASKS_BEFORE_ESCALATION || '2'} onChange={e => setSettings(s => ({ ...s, MAX_TASKS_BEFORE_ESCALATION: e.target.value }))} /><span style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginRight: 8 }}>tasks</span><SaveBtn onClick={() => save('MAX_TASKS_BEFORE_ESCALATION', settings.MAX_TASKS_BEFORE_ESCALATION || '2')} saving={saving === 'MAX_TASKS_BEFORE_ESCALATION'} /></>}
             />
           </Section>
         </div>

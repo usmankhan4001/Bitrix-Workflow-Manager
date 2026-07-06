@@ -63,15 +63,6 @@ export class WorkflowController {
   @Get('assigned-today')
   getAssignedTodayCount() { return this.workflowService.getAssignedTodayCount(); }
 
-  // ─── Completed Queue (Gap 2) ───────────────────────────────────────────────
-
-  @Get('completed-queue')
-  getCompletedQueue(@Query('team') team?: string) {
-    return this.workflowService.getCompletedQueue(team);
-  }
-
-  // ─── Bitrix24 Users & Departments ─────────────────────────────────────────
-
   // ─── Workflow Status (dashboard snapshot) ──────────────────────────────────
 
   @Get('status')
@@ -130,20 +121,6 @@ export class WorkflowController {
     return this.workflowService.clearQueue();
   }
 
-  // ─── Bitrix24 Inbound Webhook (Task Comments) ─────────────────────────────
-
-  @Post('webhook/task-comment')
-  async taskCommentWebhook(@Body() payload: any) {
-    return this.workflowService.handleTaskCommentWebhook(payload);
-  }
-
-  // ─── Bitrix24 Inbound Webhook (Lead Change) ───────────────────────────────
-
-  @Post('webhook/lead-change')
-  async leadChangeWebhook(@Body() payload: any) {
-    return this.workflowService.handleLeadChangeWebhook(payload);
-  }
-
   // ─── WhatsApp ─────────────────────────────────────────────────────────────
 
   @Get('chat/:phone')
@@ -156,9 +133,4 @@ export class WorkflowController {
 
   @Post('whatsapp/test')
   testWhatsapp(@Body() body: { phone: string }) { return this.whatsapp.testConnection(body.phone); }
-
-  @Get('whatsapp/templates')
-  async getWhatsappTemplates() {
-    return { templates: await this.whatsapp.getTemplates() };
-  }
 }

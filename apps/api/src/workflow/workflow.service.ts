@@ -7,13 +7,9 @@ const SETTING_DEFAULTS: Record<string, string> = {
   WORKFLOW_END_TIME: '18:00',
   NOT_ALLOWED_DAYS: '[0,6]',
   WHATSAPP_ENABLED: 'false',
-  ONCLOUD_ASSIGN_TEMPLATE: 'lead_assigned',
-  ONCLOUD_OVERDUE_TEMPLATE: 'lead_overdue',
-  ONCLOUD_TEMPLATE_LANGUAGE: 'en',
   SLA_HOURS: '24',
   ALLOWED_SOURCES: '[]',              // JSON array of source IDs eligible for assignment; empty = all sources allowed
   WORKFLOW_MANAGER_ID: '1',
-  MAX_TASKS_BEFORE_ESCALATION: '2',
   WORKFLOW_ENABLED: 'true',            // master on/off switch — set to 'false' to pause all lead assignment
   // Assignment scope
   LEAD_ASSIGNMENT_TEAM: 'B2C',        // rotation team that receives incoming leads
@@ -189,41 +185,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return this.assignmentLog.count({ where: { assigned_at: { gte: midnight } } });
   }
 
-  // ─── Completed Queue (Gap 2) ───────────────────────────────────────────────
-
-  async addToCompletedQueue(agentId: string, agentName: string, team: string, leadId: string) {
-    // Only add if not already in queue for this agent
-    const existing = await this.completedQueue.findFirst({ where: { agent_id: agentId } });
-    if (!existing) {
-      await this.completedQueue.create({ data: { agent_id: agentId, agent_name: agentName, team, lead_id: leadId } });
-      this.logger.log(`${agentName} added to completed queue for team "${team}"`);
-    }
-  }
-
-  async popFromCompletedQueue(team: string): Promise<any | null> {
-    const entry = await this.completedQueue.findFirst({
-      where: { team },
-      orderBy: { queued_at: 'asc' },
-    });
-    if (!entry) return null;
-    await this.completedQueue.delete({ where: { id: entry.id } });
-    // Verify agent is still active before reassigning
-    const agent = await this.agent.findUnique({ where: { id: entry.agent_id } });
-    if (!agent || !agent.is_active) {
-      this.logger.log(`Skipped ${entry.agent_name} from completed queue — no longer active`);
-      return this.popFromCompletedQueue(team); // recurse to next entry
-    }
-    this.logger.log(`Popped ${entry.agent_name} from completed queue for re-assignment`);
-    return entry;
-  }
-
-  async getCompletedQueue(team?: string) {
-    return this.completedQueue.findMany({
-      where: team ? { team } : undefined,
-      orderBy: { queued_at: 'asc' },
-    });
-  }
-
   // ─── Time / Day Helpers ────────────────────────────────────────────────────
 
   isWithinBusinessHours(settings: Record<string, string>): boolean {
@@ -323,12 +284,13 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
-  // ─── Duplicate detection ───────────────────────────────────────────────────
-  // The same person often enters Bitrix as several leads from different sources
-  // (e.g. Website + CRM form). We skip the duplicate so it isn't round-robined to
-  // a second rep — a manager reviews/merges it instead. A lead is a duplicate when
-  // Bitrix flags it as a repeat customer, OR another lead already exists with the
-  // same phone/email.
+  // ─── Duplicate detection & sticky ownership ────────────────────────────────
+  // The same customer often enters Bitrix as several leads from different sources
+  // (e.g. Website + CRM form). To prevent two reps fighting over one customer, a
+  // duplicate is routed to the rep who ALREADY owns that customer (sticky
+  // ownership). If that owner is inactive/unknown, it goes to the Escalation
+  // Manager. Matching is by phone or email (Bitrix's own repeat flag is ignored —
+  // the app stays in control).
 
   // Ask Bitrix for other lead IDs that share this phone/email (excludes the lead itself).
   private async findDuplicateLeadIds(
@@ -359,35 +321,30 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return [...matches];
   }
 
-  async isDuplicateLead(leadId: string, lead: LeadDetails, creds: BitrixCreds): Promise<{ duplicate: boolean; reason?: string }> {
-    // If we've already processed THIS lead before, it isn't a *new* duplicate
-    // (e.g. an overdue re-assignment of a lead we already own).
-    const ownLog = await this.assignmentLog.findFirst({ where: { lead_id: String(leadId) } });
-    if (ownLog) return { duplicate: false };
-
-    // Bitrix's own repeat-customer flag
-    if (lead.isReturnCustomer) return { duplicate: true, reason: 'Bitrix marked it as a repeat customer' };
-
-    // Same phone / email on another lead
-    const dupIds = await this.findDuplicateLeadIds(String(leadId), lead.phone || '', lead.email || '', creds);
-    if (dupIds.length > 0) {
-      return { duplicate: true, reason: `matches existing lead(s) ${dupIds.join(', ')} by phone/email` };
+  // Given the existing duplicate lead IDs, find the ACTIVE agent who owns the
+  // customer. Prefers our own assignment log (most recent), then falls back to the
+  // existing lead's Bitrix ASSIGNED_BY_ID. Returns null if no active owner found.
+  private async resolveDuplicateOwner(dupLeadIds: string[], creds: BitrixCreds): Promise<any | null> {
+    // 1) Our assignment log — who did WE assign these duplicate leads to?
+    const logs = await this.assignmentLog.findMany({
+      where: { lead_id: { in: dupLeadIds } },
+      orderBy: { assigned_at: 'desc' },
+    });
+    for (const log of logs) {
+      const agent = await this.agent.findUnique({ where: { id: log.agent_id } });
+      if (agent && agent.is_active) return agent;
     }
-    return { duplicate: false };
-  }
 
-  // ─── Bitrix24: Count tasks for a lead ─────────────────────────────────────
-
-  async getTaskCountForLead(leadId: string, creds: BitrixCreds): Promise<number> {
-    try {
-      const separator = this.bitrixUrl('tasks.task.list', creds).includes('?') ? '&' : '?';
-      const url = `${this.bitrixUrl('tasks.task.list', creds)}${separator}filter[UF_CRM_TASK]=L_${leadId}&select[]=ID`;
-      const res = await fetch(url);
-      const data = (await res.json()) as any;
-      return data.result?.tasks?.length ?? 0;
-    } catch {
-      return 0;
+    // 2) Fall back to the existing lead's responsible person in Bitrix
+    for (const dupId of dupLeadIds) {
+      const dupLead = await this.fetchLeadDetails(dupId, creds);
+      if (dupLead.assignedById) {
+        const agent = await this.agent.findFirst({ where: { bitrix_user_id: dupLead.assignedById } });
+        if (agent && agent.is_active) return agent;
+      }
     }
+
+    return null;
   }
 
   // ─── Bitrix24: Mutations ───────────────────────────────────────────────────
@@ -401,19 +358,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return data.result === true;
     } catch (err) {
       this.logger.error(`assignLeadInBitrix failed: ${(err as Error).message}`);
-      return false;
-    }
-  }
-
-  async changeLeadStage(leadId: string, statusId: string, creds: BitrixCreds): Promise<boolean> {
-    try {
-      const body = new URLSearchParams({ id: leadId, 'fields[STATUS_ID]': statusId });
-      if (creds.accessToken) body.append('auth', creds.accessToken);
-      const res = await fetch(this.bitrixUrl('crm.lead.update', creds), { method: 'POST', body });
-      const data = (await res.json()) as any;
-      return data.result === true;
-    } catch (err) {
-      this.logger.error(`changeLeadStage failed: ${(err as Error).message}`);
       return false;
     }
   }
@@ -449,18 +393,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     } catch (err) {
       this.logger.error(`createBitrixTask failed: ${(err as Error).message}`);
       return null;
-    }
-  }
-
-  async completeTask(taskId: string, creds: BitrixCreds): Promise<boolean> {
-    try {
-      const body = new URLSearchParams({ taskId });
-      if (creds.accessToken) body.append('auth', creds.accessToken);
-      const res = await fetch(this.bitrixUrl('tasks.task.complete', creds), { method: 'POST', body });
-      const data = (await res.json()) as any;
-      return !data.error;
-    } catch {
-      return false;
     }
   }
 
@@ -544,69 +476,61 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         return { success: true, skipped: true, message: `Source "${lead.sourceId}" is not allowed` };
       }
 
-      // Skip duplicate leads (same person arriving from another source) so they aren't
-      // assigned to a second rep. Left untouched for a manager to review/merge.
-      if (!force && !targetAgent) {
-        const dup = await this.isDuplicateLead(cleanLeadId, lead, creds);
-        if (dup.duplicate) {
-          this.logger.log(`Lead #${cleanLeadId} ("${lead.name}") skipped — duplicate: ${dup.reason}`);
-          await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
-          return { success: true, skipped: true, message: `Duplicate lead — ${dup.reason}. Left for manager review.` };
+      const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
+
+      // Decide who receives the lead.
+      let agent: any = targetAgent;
+      let assignReason = 'round-robin';
+      let duplicateOf: string[] = [];
+
+      if (!agent && !force) {
+        // Duplicate? (same customer by phone/email) → sticky ownership.
+        duplicateOf = await this.findDuplicateLeadIds(cleanLeadId, lead.phone || '', lead.email || '', creds);
+        if (duplicateOf.length > 0) {
+          agent = await this.resolveDuplicateOwner(duplicateOf, creds);
+          assignReason = agent
+            ? `duplicate of lead(s) ${duplicateOf.join(', ')} → existing owner ${agent.name}`
+            : `duplicate of lead(s) ${duplicateOf.join(', ')} → owner inactive/unknown`;
         }
       }
 
-      const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
+      // Fresh lead → normal round-robin.
+      if (!agent && duplicateOf.length === 0) {
+        agent = await this.pickNextAgent(team);
+      }
 
-      const agent = targetAgent || await this.pickNextAgent(team);
-
-      // Fallback: no active agents in the team → route the lead + task to the
-      // Escalation Manager instead of leaving it unassigned.
+      // Manager fallback: no active agents, OR a duplicate whose owner is gone.
       if (!agent) {
         const managerId = settings.WORKFLOW_MANAGER_ID || '1';
         const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
-        this.logger.warn(`No active agents in team "${team}" — escalating lead #${cleanLeadId} to manager (Bitrix user ${managerId})`);
+        const isDup = duplicateOf.length > 0;
+        const reason = isDup ? assignReason : `no active agents in team "${team}"`;
+        this.logger.warn(`Lead #${cleanLeadId} ("${lead.name}") → Escalation Manager (${reason})`);
+
+        const title = isDup ? `⚠️ Duplicate lead — review: ${lead.name}` : `⚠️ No agent available: ${lead.name}`;
+        const desc = isDup
+          ? `Lead "${lead.name}" is a duplicate of ${duplicateOf.join(', ')} but its previous owner is inactive/unknown. Please review, merge, or assign.`
+          : `No active sales agent was available in team "${team}" to take lead "${lead.name}". Please assign it manually.`;
 
         const [, mgrTaskId] = await Promise.all([
           this.assignLeadInBitrix(cleanLeadId, managerId, creds),
-          this.createBitrixTask(
-            cleanLeadId,
-            lead.name,
-            managerId,
-            creds,
-            slaHours,
-            `⚠️ No agent available: ${lead.name}`,
-            `No active sales agent was available in team "${team}" to take lead "${lead.name}". Please assign it manually.`,
-          ),
+          this.createBitrixTask(cleanLeadId, lead.name, managerId, creds, slaHours, title, desc),
         ]);
 
-        await this.assignmentLog.create({
-          data: {
-            lead_id: cleanLeadId,
-            agent_id: manager?.id || 'escalation-manager',
-            agent_name: manager?.name || `Manager #${managerId}`,
-            team,
-          },
+        const mlog = await this.assignmentLog.create({
+          data: { lead_id: cleanLeadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
         });
-        await this.lateLead.updateMany({
-          where: { lead_id: cleanLeadId },
-          data: { processed: true, processed_at: new Date() },
-        });
+        await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
 
         if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
-          await this.whatsapp.sendLeadAssignedNotification(
-            manager.whatsapp_phone,
-            manager.name.split(' ')[0],
-            lead.name,
-            lead.source,
-            settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
-            settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-            lead.phone,
-          );
+          const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours);
+          if (ok) await this.assignmentLog.update({ where: { id: mlog.id }, data: { wa_notified: true } });
         }
 
-        return { success: true, agent: manager, taskId: mgrTaskId, message: `No active agents — escalated to manager` };
+        return { success: true, agent: manager, taskId: mgrTaskId, message: reason };
       }
 
+      // Assign to the chosen agent (round-robin or sticky-ownership owner).
       const [, taskId] = await Promise.all([
         this.assignLeadInBitrix(cleanLeadId, agent.bitrix_user_id, creds),
         this.createBitrixTask(cleanLeadId, lead.name, agent.bitrix_user_id, creds, slaHours),
@@ -624,21 +548,13 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // WhatsApp notification
       let waNotified = false;
       if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
-        waNotified = await this.whatsapp.sendLeadAssignedNotification(
-          agent.whatsapp_phone,
-          agent.name.split(' ')[0],
-          lead.name,
-          lead.source,
-          settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
-          settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-          lead.phone,
-        );
+        waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours);
         if (waNotified) {
           await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
         }
       }
 
-      this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}]. Task: ${taskId}. WA: ${waNotified}`);
+      this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${assignReason}). Task: ${taskId}. WA: ${waNotified}`);
       return { success: true, agent, taskId };
     } finally {
       this.activeAssignments.delete(cleanLeadId);
@@ -681,219 +597,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     this.logger.log(`Cron done — processed: ${processed}, skipped: ${skipped}, failed: ${failed}`);
     return { processed, skipped, failed };
-  }
-
-  // ─── GAP 2: Task comment webhook — full parity logic ──────────────────────
-
-  async fetchLeadIdFromTask(taskId: string, creds: BitrixCreds): Promise<string | null> {
-    try {
-      const sep = this.bitrixUrl('tasks.task.get', creds).includes('?') ? '&' : '?';
-      const url = `${this.bitrixUrl('tasks.task.get', creds)}${sep}taskId=${taskId}&select[]=UF_CRM_TASK&select[]=ID`;
-      const res = await fetch(url);
-      const data = (await res.json()) as any;
-      const crmField = data.result?.task?.ufCrmTask || data.result?.task?.UF_CRM_TASK;
-      if (crmField && Array.isArray(crmField)) {
-        const leadItem = crmField.find((item: string) => item.startsWith('L_'));
-        if (leadItem) {
-          return leadItem.replace('L_', '');
-        }
-      }
-      return null;
-    } catch (err) {
-      this.logger.warn(`fetchLeadIdFromTask failed for task #${taskId}: ${(err as Error).message}`);
-      return null;
-    }
-  }
-
-  async handleTaskCommentWebhook(payload: any): Promise<{ action: string; detail?: string }> {
-    const settings = await this.getSettings();
-    const creds = this.getWebhookCreds();
-
-    // Extract fields from Bitrix24 webhook payload
-    const taskId: string = payload?.data?.FIELDS_AFTER?.TASK_ID
-      || payload?.data?.FIELDS?.TASK_ID
-      || payload?.TASK_ID || '';
-
-    const comment: string = (payload?.data?.FIELDS_AFTER?.POST_MESSAGE || '').toLowerCase();
-    const responsibleUserId: string = payload?.data?.FIELDS_AFTER?.CREATED_BY
-      || payload?.data?.FIELDS?.CREATED_BY || '';
-    
-    let leadId: string = payload?.data?.LEAD_ID || payload?.LEAD_ID || '';
-
-    if (!leadId && taskId) {
-      const resolved = await this.fetchLeadIdFromTask(taskId, creds);
-      if (resolved) {
-        leadId = resolved;
-        this.logger.log(`Resolved Lead ID #${leadId} dynamically from task #${taskId}`);
-      }
-    }
-
-    // ── COMPLETED ──
-    if (comment.includes('complete') || comment.includes('done') || comment.includes('finished')) {
-      this.logger.log(`Task ${taskId} completed via webhook`);
-
-      // Find who owns this task in our assignment log
-      if (leadId) {
-        const lastAssignment = await this.assignmentLog.findFirst({
-          where: { lead_id: String(leadId) },
-          orderBy: { assigned_at: 'desc' },
-        });
-        if (lastAssignment) {
-          const agent = await this.agent.findUnique({ where: { id: lastAssignment.agent_id } });
-          if (agent) {
-            // Add this agent to the completed queue — they get priority on next overdue lead
-            await this.addToCompletedQueue(agent.id, agent.name, agent.team, String(leadId));
-          }
-        }
-        // Change lead stage to IN_PROCESS (matches old system behaviour)
-        await this.changeLeadStage(String(leadId), 'IN_PROCESS', creds);
-      }
-
-      return { action: 'completed' };
-    }
-
-    // ── OVERDUE ──
-    if (comment.includes('overdue') || comment.includes('expired') || comment.includes('deadline')) {
-      this.logger.log(`Overdue task ${taskId} detected via webhook`);
-
-      if (!leadId) return { action: 'received', detail: 'no lead_id in payload' };
-
-      const lastAssignment = await this.assignmentLog.findFirst({
-        where: { lead_id: String(leadId) },
-        orderBy: { assigned_at: 'desc' },
-      });
-
-      if (!lastAssignment) return { action: 'received', detail: 'no assignment log entry' };
-
-      const agent = await this.agent.findUnique({ where: { id: lastAssignment.agent_id } });
-      const maxTasks = parseInt(settings.MAX_TASKS_BEFORE_ESCALATION || '2', 10);
-      const taskCount = await this.getTaskCountForLead(String(leadId), creds);
-
-      // Try to find an agent who already completed a task (FIFO priority queue)
-      const completedEntry = await this.popFromCompletedQueue(lastAssignment.team);
-
-      if (completedEntry && taskCount < maxTasks) {
-        // Re-assign to the agent who completed first
-        const targetAgent = await this.agent.findUnique({ where: { id: completedEntry.agent_id } });
-        if (targetAgent) {
-          this.logger.log(`Overdue lead #${leadId}: re-assigning to ${targetAgent.name} (was in completed queue)`);
-          await this.processLeadAssignment(String(leadId), targetAgent.team, creds, false, targetAgent);
-          return { action: 'reassigned', detail: `Reassigned to ${targetAgent.name} from completed queue` };
-        }
-      }
-
-      if (taskCount >= maxTasks) {
-        // Escalate to Workflow Manager
-        this.logger.log(`Overdue lead #${leadId}: escalating to Workflow Manager (${taskCount} tasks already)`);
-        const managerId = settings.WORKFLOW_MANAGER_ID || '1';
-        const lead = await this.fetchLeadDetails(String(leadId), creds);
-
-        // Assign lead to manager in Bitrix24
-        await this.assignLeadInBitrix(String(leadId), managerId, creds);
-
-        await this.createBitrixTask(
-          String(leadId),
-          lead.name,
-          managerId,
-          creds,
-          parseInt(settings.SLA_HOURS || '24', 10),
-          `⚠️ Action Required: ${lead.name}`,
-          `Lead "${lead.name}" has had ${taskCount} tasks and still requires attention. Please review and reassign manually.`,
-        );
-
-        // WhatsApp to manager if configured
-        if (settings.WHATSAPP_ENABLED === 'true') {
-          const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
-          const managerPhone = manager?.whatsapp_phone;
-          if (managerPhone) {
-            await this.whatsapp.sendOverdueNotification(
-              managerPhone,
-              manager.name.split(' ')[0],
-              lead.name,
-              lead.source,
-              settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
-              settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-              lead.phone,
-            );
-          }
-        }
-        return { action: 'escalated', detail: `Escalated to manager ID ${managerId}` };
-      }
-
-      // Standard overdue notification — no re-assignment, just notify
-      if (settings.WHATSAPP_ENABLED === 'true' && agent?.whatsapp_phone) {
-        const lead = await this.fetchLeadDetails(String(leadId), creds);
-        await this.whatsapp.sendOverdueNotification(
-          agent.whatsapp_phone,
-          agent.name.split(' ')[0],
-          lead.name,
-          lead.source,
-          settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
-          settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-          lead.phone,
-        );
-      }
-
-      return { action: 'notified' };
-    }
-
-    return { action: 'received' };
-  }
-
-  async fetchWorkflowManagerTasks(leadId: string, managerId: string, creds: BitrixCreds): Promise<string[]> {
-    try {
-      const mgrSep = this.bitrixUrl('tasks.task.list', creds).includes('?') ? '&' : '?';
-      const url = `${this.bitrixUrl('tasks.task.list', creds)}${mgrSep}filter[UF_CRM_TASK]=L_${leadId}&filter[RESPONSIBLE_ID]=${managerId}&select[]=ID`;
-      const res = await fetch(url);
-      const data = (await res.json()) as any;
-      const tasks = data.result?.tasks || [];
-      return tasks.map((t: any) => String(t.id));
-    } catch {
-      return [];
-    }
-  }
-
-  async handleLeadChangeWebhook(payload: any): Promise<{ action: string; detail?: string }> {
-    const settings = await this.getSettings();
-    const creds = this.getWebhookCreds();
-
-    const leadId = payload?.data?.FIELDS?.ID || payload?.FIELDS?.ID || '';
-    if (!leadId) return { action: 'ignored', detail: 'No lead ID in payload' };
-
-    const lead = await this.fetchLeadDetails(leadId, creds);
-    const managerId = settings.WORKFLOW_MANAGER_ID || '1';
-
-    // Check if the change was made by the workflow manager, and the assignee is now a salesperson (not the manager)
-    if (lead.modifyById === managerId && lead.assignedById !== managerId && lead.assignedById) {
-      this.logger.log(`Manual reassignment of escalated lead #${leadId} detected. Reassigned by Manager to ${lead.assignedById}`);
-
-      // Complete manager's active tasks for this lead
-      const managerTasks = await this.fetchWorkflowManagerTasks(leadId, managerId, creds);
-      for (const taskId of managerTasks) {
-        await this.completeTask(taskId, creds);
-        this.logger.log(`Auto-completed manager task ${taskId}`);
-      }
-
-      // Create new follow-up task for the new salesperson
-      const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
-      const taskId = await this.createBitrixTask(leadId, lead.name, lead.assignedById, creds, slaHours);
-      this.logger.log(`Created follow-up task ${taskId} for new assignee ${lead.assignedById}`);
-
-      // Log the assignment in our local logs
-      const agent = await this.agent.findFirst({ where: { bitrix_user_id: lead.assignedById } });
-      await this.assignmentLog.create({
-        data: {
-          lead_id: leadId,
-          agent_id: agent?.id || 'manual-assignee',
-          agent_name: agent?.name || `Bitrix User #${lead.assignedById}`,
-          team: agent?.team || 'unknown',
-        },
-      });
-
-      return { action: 'processed', detail: `Reassigned from manager to ${lead.assignedById}` };
-    }
-
-    return { action: 'ignored', detail: 'Not a manager reassignment' };
   }
 
   // ─── Dashboard Status (combined snapshot for the UI) ────────────────────────

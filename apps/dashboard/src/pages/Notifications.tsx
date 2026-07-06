@@ -41,7 +41,6 @@ const FormRow: React.FC<{ label: string; desc?: string; tip?: string; right: Rea
 
 const Notifications: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -50,13 +49,11 @@ const Notifications: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {}),
-      fetch(`${API()}/api/workflow/whatsapp/templates`).then(r => r.ok ? r.json() : { templates: [] }),
-    ]).then(([s, t]) => {
-      setSettings(s);
-      setTemplates(t.templates || []);
-    }).catch(console.error).finally(() => setLoading(false));
+    fetch(`${API()}/api/workflow/settings`)
+      .then(r => r.ok ? r.json() : {})
+      .then(s => setSettings(s))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const save = async (key: string, value: string) => {
@@ -92,20 +89,6 @@ const Notifications: React.FC = () => {
 
   const waEnabled = settings.WHATSAPP_ENABLED === 'true';
 
-  const TemplateField: React.FC<{ settingKey: string; placeholder: string }> = ({ settingKey, placeholder }) =>
-    templates.length > 0
-      ? <select className="b24-select" style={{ width: 220 }} value={settings[settingKey] || ''} onChange={e => setSettings(s => ({ ...s, [settingKey]: e.target.value }))}>
-          <option value="">— Select template —</option>
-          {templates.map(t => <option key={t.id} value={t.name}>{t.name} ({t.language})</option>)}
-        </select>
-      : <input type="text" className="b24-input" style={{ width: 220, fontFamily: 'monospace' }} placeholder={placeholder} value={settings[settingKey] || ''} onChange={e => setSettings(s => ({ ...s, [settingKey]: e.target.value }))} />;
-
-  const SaveBtn: React.FC<{ k: string; val: string }> = ({ k, val }) => (
-    <button onClick={() => save(k, val)} disabled={saving === k} className="b24-btn b24-btn-secondary" style={{ height: 28, fontSize: 12, padding: '0 12px' }}>
-      {saving === k ? 'Saving…' : 'Save'}
-    </button>
-  );
-
   if (loading) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--b24-bg)' }}>
       <span style={{ color: 'var(--b24-text-muted)', fontSize: 13 }}>Loading…</span>
@@ -135,9 +118,9 @@ const Notifications: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 4, margin: 0 }}>WhatsApp Alerts via OnCloud API</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 4, margin: 0 }}>WhatsApp Alerts via WAHA</p>
               <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0 }}>
-                When enabled, your team members receive an automatic WhatsApp message whenever a lead is assigned to them, and another if they miss the SLA deadline. You need an active account at <strong style={{ color: 'var(--b24-text)' }}>apps.oncloudapi.com</strong> and your token set in the server's <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>ONCLOUD_API_TOKEN</code> environment variable.
+                When enabled, each salesperson gets a WhatsApp message the moment a lead is assigned to them — with the lead's name, contact number, and how long they have to follow up. Messages are sent through your self-hosted <strong style={{ color: 'var(--b24-text)' }}>WAHA</strong> service (configured via <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_URL</code> / <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_API_KEY</code>). No message templates to approve.
               </p>
             </div>
           </div>
@@ -160,43 +143,11 @@ const Notifications: React.FC = () => {
               />
             </div>
             <div className="b24-section-body" style={{ padding: '20px' }}>
-              {/* Templates */}
-              <FormRow
-                label="New lead assigned — message template"
-                desc="Sent immediately when a salesperson is assigned a lead."
-                tip="This must match the exact template name in your OnCloud account. The template should have: {{1}} = agent name, {{2}} = lead name, {{3}} = source."
-                right={<><TemplateField settingKey="ONCLOUD_ASSIGN_TEMPLATE" placeholder="e.g. lead_assigned" /><SaveBtn k="ONCLOUD_ASSIGN_TEMPLATE" val={settings.ONCLOUD_ASSIGN_TEMPLATE || ''} /></>}
-              />
-              <FormRow
-                label="SLA overdue — message template"
-                desc="Sent when a lead hasn't been handled within your SLA window."
-                tip="Same format as the assignment template. {{1}} = agent name, {{2}} = lead name, {{3}} = source."
-                right={<><TemplateField settingKey="ONCLOUD_OVERDUE_TEMPLATE" placeholder="e.g. lead_overdue" /><SaveBtn k="ONCLOUD_OVERDUE_TEMPLATE" val={settings.ONCLOUD_OVERDUE_TEMPLATE || ''} /></>}
-              />
-              <FormRow
-                label="Template language"
-                desc="Must match the language code in your OnCloud template."
-                tip='Usually "en" for English or "ar" for Arabic. Must match exactly what is set in OnCloud.'
-                right={<><input type="text" className="b24-input" style={{ width: 80, fontFamily: 'monospace' }} placeholder="en" value={settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en'} onChange={e => setSettings(s => ({ ...s, ONCLOUD_TEMPLATE_LANGUAGE: e.target.value }))} /><SaveBtn k="ONCLOUD_TEMPLATE_LANGUAGE" val={settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en'} /></>}
-              />
-
-              {/* Save all */}
-              <div style={{ padding: '14px 0 0 0', marginTop: 12 }}>
-                <button
-                  onClick={async () => {
-                    setSaving('WA_ALL');
-                    for (const k of ['ONCLOUD_ASSIGN_TEMPLATE', 'ONCLOUD_OVERDUE_TEMPLATE', 'ONCLOUD_TEMPLATE_LANGUAGE']) {
-                      if (settings[k] !== undefined) {
-                        await fetch(`${API()}/api/workflow/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k, value: settings[k] }) });
-                      }
-                    }
-                    setSaving(null); showToast('success', 'Template settings saved');
-                  }}
-                  disabled={saving === 'WA_ALL'}
-                  className="b24-btn b24-btn-primary"
-                >
-                  {saving === 'WA_ALL' ? 'Saving…' : 'Save all template settings'}
-                </button>
+              <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: '0 0 10px 0' }}>
+                This is the message each agent receives when a lead is assigned to them (no templates to configure):
+              </p>
+              <div style={{ background: 'var(--b24-input-bg)', border: '1px solid var(--b24-divider)', borderRadius: 8, padding: '14px 16px', fontSize: 13, color: 'var(--b24-text)', whiteSpace: 'pre-line', lineHeight: 1.7, fontFamily: 'system-ui' }}>
+                {'🟢 New lead assigned to you\n\n👤 Agent: Ahmad Ali Shah\n📋 Lead: Tania\n📞 Contact: 03001234567\n⏰ Complete within: ' + (settings.SLA_HOURS || '24') + ' hours (by 16 Jun, 03:20 pm)\n\nPlease follow up and update the lead in Bitrix24.'}
               </div>
             </div>
           </div>
@@ -207,7 +158,7 @@ const Notifications: React.FC = () => {
             <div className="b24-card" style={{ padding: '20px' }}>
               <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 4, margin: 0 }}>Test your connection</p>
               <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', marginBottom: 12, margin: '4px 0 12px 0' }}>
-                Send a test message to verify your OnCloud API token is working before enabling notifications for your team.
+                Send a test message to verify WAHA is connected (logged in) before enabling notifications for your team.
               </p>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
@@ -243,15 +194,9 @@ const Notifications: React.FC = () => {
                 {[
                   {
                     label: 'New Lead Assigned',
-                    desc: 'Fires immediately when a lead is round-robin assigned to a salesperson.',
-                    params: '{{1}} Agent name  ·  {{2}} Lead name  ·  {{3}} Source',
+                    desc: 'Fires immediately when a lead is assigned to a salesperson (round-robin, or the existing owner for a repeat customer).',
+                    params: 'Agent name  ·  Lead name  ·  Contact number  ·  Time to complete',
                     color: 'var(--b24-green)',
-                  },
-                  {
-                    label: 'SLA Overdue',
-                    desc: 'Fires when the SLA deadline passes and the lead is still unresolved — reminds the agent.',
-                    params: '{{1}} Agent name  ·  {{2}} Lead name  ·  {{3}} Source',
-                    color: 'var(--b24-orange)',
                   },
                 ].map((item, idx) => (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.01)', border: '1px solid var(--b24-divider)', borderBottom: idx === 1 ? '1px solid var(--b24-divider)' : undefined }}>

@@ -1,115 +1,63 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+/**
+ * WhatsApp notifications via WAHA (https://waha.devlike.pro).
+ *
+ * WAHA is a self-hosted WhatsApp HTTP API. It sends plain-text messages from a
+ * logged-in WhatsApp number — no template approval needed. We talk to it over the
+ * internal Docker network.
+ *
+ * Env:
+ *   WAHA_URL      base URL of the WAHA service (e.g. http://waha:3000)
+ *   WAHA_SESSION  session name (default "default")
+ *   WAHA_API_KEY  API key configured on the WAHA container (X-Api-Key header)
+ */
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
-  private readonly baseUrl = 'https://apps.oncloudapi.com';
 
-  private cachedTemplates: any[] = [];
-  private lastFetched = 0;
-
-  private getToken(): string {
-    return process.env.ONCLOUD_API_TOKEN || '';
+  private get baseUrl(): string {
+    return (process.env.WAHA_URL || 'http://waha:3000').replace(/\/$/, '');
+  }
+  private get session(): string {
+    return process.env.WAHA_SESSION || 'default';
+  }
+  private get apiKey(): string {
+    return process.env.WAHA_API_KEY || '';
   }
 
-  async getCachedTemplates(): Promise<any[]> {
-    const now = Date.now();
-    if (this.cachedTemplates.length === 0 || now - this.lastFetched > 600000) {
-      this.cachedTemplates = await this.getTemplates();
-      this.lastFetched = now;
-    }
-    return this.cachedTemplates;
+  // Turn a stored phone number into a WAHA chatId: digits only + "@c.us".
+  private toChatId(phone: string): string {
+    return `${phone.replace(/[^\d]/g, '')}@c.us`;
   }
 
-  async getDynamicUrlButtonIndex(templateName: string): Promise<string | null> {
-    try {
-      const templates = await this.getCachedTemplates();
-      const template = templates.find(t => t.name === templateName);
-      if (!template) return null;
-      const components = JSON.parse(template.components || '[]');
-      const buttonsComponent = components.find((c: any) => String(c.type).toUpperCase() === 'BUTTONS');
-      if (!buttonsComponent || !Array.isArray(buttonsComponent.buttons)) return null;
-      
-      const idx = buttonsComponent.buttons.findIndex((b: any) => 
-        String(b.type).toUpperCase() === 'URL' && 
-        b.url && 
-        b.url.includes('{{1}}')
-      );
-      return idx !== -1 ? String(idx) : null;
-    } catch (err) {
-      this.logger.warn(`getDynamicUrlButtonIndex failed for ${templateName}: ${(err as Error).message}`);
-      return null;
-    }
-  }
-
-  async sendTemplateMessage(
-    phone: string,
-    templateName: string,
-    templateLanguage: string,
-    bodyParams: string[],
-    buttonUrlParam?: string,
-  ): Promise<boolean> {
-    const token = this.getToken();
-    if (!token) {
-      this.logger.warn('ONCLOUD_API_TOKEN not set — skipping WhatsApp notification');
-      return false;
-    }
-
-    // OnCloud expects a bare international number (country code + number, digits only).
-    // Strip '+', spaces, dashes, parentheses — these are the most common rejection cause.
-    const normalizedPhone = phone.replace(/[^\d]/g, '');
-    if (!normalizedPhone) {
+  /** Low-level: send a plain text message to one number. */
+  async sendText(phone: string, text: string): Promise<boolean> {
+    const digits = phone.replace(/[^\d]/g, '');
+    if (!digits) {
       this.logger.warn(`WhatsApp skipped — invalid phone "${phone}"`);
       return false;
     }
 
-    const components: any[] = [
-      {
-        type: 'body',
-        parameters: bodyParams.map((text) => ({ type: 'text', text })),
-      },
-    ];
-
-    if (buttonUrlParam) {
-      const btnIdx = await this.getDynamicUrlButtonIndex(templateName);
-      if (btnIdx !== null) {
-        const normalizedButtonParam = buttonUrlParam.replace(/[^\d]/g, '');
-        if (normalizedButtonParam) {
-          components.push({
-            type: 'button',
-            sub_type: 'url',
-            index: btnIdx,
-            parameters: [
-              {
-                type: 'text',
-                text: normalizedButtonParam,
-              },
-            ],
-          });
-        }
-      } else {
-        this.logger.log(`Template "${templateName}" does not have a dynamic URL button — skipping button component.`);
-      }
-    }
-
     try {
-      const res = await fetch(`${this.baseUrl}/api/wpbox/sendtemplatemessage`, {
+      const res = await fetch(`${this.baseUrl}/api/sendText`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.apiKey ? { 'X-Api-Key': this.apiKey } : {}),
+        },
         body: JSON.stringify({
-          token,
-          phone: normalizedPhone,
-          template_name: templateName,
-          template_language: templateLanguage,
-          components,
+          session: this.session,
+          chatId: this.toChatId(digits),
+          text,
         }),
       });
-      const data = (await res.json()) as any;
-      if (data.status === 'success' || data.message_id) {
-        this.logger.log(`WhatsApp sent to ${normalizedPhone} via template "${templateName}"`);
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (res.ok && !data?.error) {
+        this.logger.log(`WhatsApp sent to ${digits}`);
         return true;
       }
-      this.logger.warn(`WhatsApp API non-success for ${normalizedPhone} (template "${templateName}"): ${JSON.stringify(data)}`);
+      this.logger.warn(`WhatsApp send to ${digits} failed (HTTP ${res.status}): ${JSON.stringify(data)}`);
       return false;
     } catch (err) {
       this.logger.error(`WhatsApp send failed: ${(err as Error).message}`);
@@ -117,68 +65,57 @@ export class WhatsappService {
     }
   }
 
-  // Params sent: {{1}} Agent first name  {{2}} Lead name/title  {{3}} Source
+  /**
+   * Notify an agent that a lead was assigned to them.
+   * Message includes: agent name, lead name, lead contact number, time to complete.
+   */
   async sendLeadAssignedNotification(
     agentPhone: string,
-    agentFirstName: string,
+    agentName: string,
     leadName: string,
-    source: string,
-    templateName: string,
-    templateLanguage = 'en',
-    leadPhone?: string,
+    leadContact: string,
+    slaHours: number,
   ): Promise<boolean> {
-    return this.sendTemplateMessage(
-      agentPhone,
-      templateName,
-      templateLanguage,
-      [agentFirstName, leadName, source],
-      leadPhone,
-    );
+    const deadline = new Date(Date.now() + slaHours * 3600 * 1000);
+    const deadlineStr = deadline.toLocaleString('en-GB', {
+      timeZone: 'Asia/Karachi',
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+
+    const text =
+      `🟢 *New lead assigned to you*\n\n` +
+      `👤 Agent: ${agentName}\n` +
+      `📋 Lead: ${leadName}\n` +
+      `📞 Contact: ${leadContact || 'N/A'}\n` +
+      `⏰ Complete within: ${slaHours} hours (by ${deadlineStr})\n\n` +
+      `Please follow up and update the lead in Bitrix24.`;
+
+    return this.sendText(agentPhone, text);
   }
 
-  // Params sent: {{1}} Agent first name  {{2}} Lead name/title  {{3}} Source
-  async sendOverdueNotification(
-    agentPhone: string,
-    agentFirstName: string,
-    leadName: string,
-    source: string,
-    templateName: string,
-    templateLanguage = 'en',
-    leadPhone?: string,
-  ): Promise<boolean> {
-    return this.sendTemplateMessage(
-      agentPhone,
-      templateName,
-      templateLanguage,
-      [agentFirstName, leadName, source],
-      leadPhone,
-    );
-  }
-
-  async testConnection(_phone: string): Promise<{ success: boolean; message: string }> {
-    const token = this.getToken();
-    if (!token) return { success: false, message: 'ONCLOUD_API_TOKEN not configured' };
+  /** Connectivity check for the dashboard "Test" button. */
+  async testConnection(phone: string): Promise<{ success: boolean; message: string }> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/wpbox/getTemplates?token=${token}`);
-      const data = (await res.json()) as any;
-      if (data.status === 'success' || Array.isArray(data.templates)) {
-        return { success: true, message: `Connected. ${data.templates?.length ?? 0} templates found.` };
+      const res = await fetch(`${this.baseUrl}/api/sessions/${this.session}`, {
+        headers: { ...(this.apiKey ? { 'X-Api-Key': this.apiKey } : {}) },
+      });
+      const data = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) {
+        return { success: false, message: `WAHA returned HTTP ${res.status}. Is WAHA running at ${this.baseUrl}?` };
       }
-      return { success: false, message: data.message || 'Unexpected response' };
+      const status = data?.status || 'UNKNOWN';
+      if (status !== 'WORKING') {
+        return { success: false, message: `WAHA session "${this.session}" is "${status}" — scan the QR in the WAHA dashboard to log in.` };
+      }
+      if (phone) {
+        const ok = await this.sendText(phone, '✅ WhatsApp test message from Workflow Manager.');
+        return ok
+          ? { success: true, message: `Connected. Test message sent to ${phone}.` }
+          : { success: false, message: 'Session is working but the test message failed — check the number.' };
+      }
+      return { success: true, message: `Connected. Session "${this.session}" is working.` };
     } catch (err) {
       return { success: false, message: (err as Error).message };
-    }
-  }
-
-  async getTemplates(): Promise<any[]> {
-    const token = this.getToken();
-    if (!token) return [];
-    try {
-      const res = await fetch(`${this.baseUrl}/api/wpbox/getTemplates?token=${token}`);
-      const data = (await res.json()) as any;
-      return data.templates || [];
-    } catch {
-      return [];
     }
   }
 }

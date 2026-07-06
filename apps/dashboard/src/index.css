@@ -1,217 +1,345 @@
 @import "tailwindcss";
 
-@theme {
-  /* Bitrix24 Sidebar (glass-dark background) */
-  --color-b24-sidebar: rgba(30, 41, 59, 0.75);
-  --color-b24-sidebar-hover: rgba(255, 255, 255, 0.08);
-  --color-b24-sidebar-active: rgba(45, 188, 245, 0.2);
-  --color-b24-sidebar-text: #e2e8f0;
-  --color-b24-sidebar-text-muted: #94a3b8;
-
-  /* Bitrix24 Content Area (light glassy backdrops) */
-  --color-b24-bg: #eef2f5;
-  --color-b24-surface: rgba(255, 255, 255, 0.45);
-  --color-b24-surface2: rgba(255, 255, 255, 0.25);
-
-  /* Bitrix24 Primary Colors */
-  --color-b24-blue: #2fc6f6;
-  --color-b24-blue-dark: #1eb5e5;
-  --color-b24-blue-light: rgba(47, 198, 246, 0.15);
-  --color-b24-green: #75c900;
-  --color-b24-green-light: rgba(117, 201, 0, 0.15);
-  --color-b24-orange: #ff7e00;
-  --color-b24-orange-light: rgba(255, 126, 0, 0.15);
-  --color-b24-red: #ff5752;
-  --color-b24-red-light: rgba(255, 87, 82, 0.15);
-  --color-b24-yellow: #f5c400;
-
-  /* Typography */
-  --color-b24-text: #333333;
-  --color-b24-text-muted: #535c69;
-  --color-b24-text-light: #8b96a8;
-
-  /* Borders */
-  --color-b24-border: rgba(255, 255, 255, 0.45);
-  --color-b24-border-light: rgba(255, 255, 255, 0.25);
-
-  --font-sans: "Open Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+/* ── Bitrix24 native design tokens (matches b24style + templates-dashboard) ── */
+:root {
+  --b24-bg:            #f0f2f5;
+  --b24-sidebar-bg:    #ffffff;
+  --b24-sidebar-w:     228px;
+  --b24-border:        #dfe2e5;
+  --b24-border-light:  #edeef0;
+  --b24-card-bg:       #ffffff;
+  --b24-card-alt:      #f7f8fa;
+  --b24-text:          #1f2937;
+  --b24-text-muted:    #6b7a8d;
+  --b24-text-light:    #a0aab4;
+  --b24-primary:       #2066b0;
+  --b24-primary-bg:    rgba(32, 102, 176, 0.08);
+  --b24-primary-ring:  rgba(32, 102, 176, 0.18);
+  --b24-green:         #7ab800;
+  --b24-green-bg:      rgba(122, 184, 0, 0.08);
+  --b24-green-ring:    rgba(122, 184, 0, 0.18);
+  --b24-orange:        #e09000;
+  --b24-orange-bg:     rgba(224, 144, 0, 0.08);
+  --b24-orange-ring:   rgba(224, 144, 0, 0.18);
+  --b24-red:           #e03030;
+  --b24-red-bg:        rgba(224, 48, 48, 0.08);
+  --b24-red-ring:      rgba(224, 48, 48, 0.18);
+  --b24-radius-lg:     14px;
+  --b24-radius-md:     8px;
+  --b24-radius-sm:     5px;
+  --b24-shadow-card:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --b24-shadow-hover:  0 4px 12px rgba(0,0,0,0.08);
 }
 
 @layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
   body {
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(206, 238, 255, 0.8) 0px, transparent 50%),
-      radial-gradient(at 50% 0%, rgba(224, 232, 255, 0.8) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(251, 232, 255, 0.8) 0px, transparent 50%),
-      radial-gradient(at 0% 100%, rgba(255, 235, 230, 0.8) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(224, 242, 254, 0.8) 0px, transparent 50%),
-      linear-gradient(135deg, #f0f6fa 0%, #e1e9f0 100%) !important;
-    background-attachment: fixed !important;
-    background-size: cover !important;
-    @apply text-b24-text font-sans antialiased min-h-screen;
+    background-color: var(--b24-bg);
+    color: var(--b24-text);
+    font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
   }
+
+  h1, h2, h3, h4, h5, h6 { margin: 0; font-weight: 600; }
+  p { margin: 0; }
+  button { font-family: inherit; }
+  input, select, textarea { font-family: inherit; }
+  table { border-collapse: collapse; }
 }
 
-@layer components {
-  /* Bitrix24 Native style UI Buttons */
-  .btn-primary {
-    background-color: #2fc6f6 !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    font-size: 11px !important;
-    letter-spacing: 0.06em !important;
-    padding: 10px 20px !important;
-    border-radius: 4px !important;
-    box-shadow: 0 2px 6px rgba(47, 198, 246, 0.2) !important;
-    transition: all 0.2s ease !important;
-    border: none !important;
-    @apply focus:outline-none cursor-pointer;
-  }
-  .btn-primary:hover {
-    background-color: #1eb5e5 !important;
-    box-shadow: 0 4px 12px rgba(47, 198, 246, 0.3) !important;
-    transform: translateY(-1px);
-  }
-  .btn-primary:active {
-    transform: translateY(0);
-    scale: 0.98;
-  }
-
-  .btn-secondary {
-    background: #ffffff !important;
-    border: 1px solid #c6cdd3 !important;
-    color: #535c69 !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    font-size: 11px !important;
-    letter-spacing: 0.06em !important;
-    padding: 10px 20px !important;
-    border-radius: 4px !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-    @apply focus:outline-none cursor-pointer;
-  }
-  .btn-secondary:hover {
-    background: #f7f9fb !important;
-    border-color: #aeb6be !important;
-    color: #333333 !important;
-  }
-  .btn-secondary:active {
-    scale: 0.98;
-  }
-
-  .btn-danger {
-    background: rgba(255, 87, 82, 0.1) !important;
-    border: 1px solid rgba(255, 87, 82, 0.25) !important;
-    color: #ff5752 !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    font-size: 11px !important;
-    letter-spacing: 0.06em !important;
-    padding: 8px 16px !important;
-    border-radius: 4px !important;
-    transition: all 0.2s ease !important;
-    @apply hover:bg-b24-red hover:text-white cursor-pointer;
-  }
-
-  /* Glassmorphism Panel */
-  .card {
-    background: rgba(255, 255, 255, 0.55) !important;
-    backdrop-filter: blur(25px) saturate(125%);
-    -webkit-backdrop-filter: blur(25px) saturate(125%);
-    border: 1px solid rgba(255, 255, 255, 0.55) !important;
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
-    border-radius: 12px !important;
-  }
-
-  /* Bitrix24 Native Style Inputs */
-  .input-field {
-    background: #ffffff !important;
-    border: 1px solid #c6cdd3 !important;
-    color: #333333 !important;
-    border-radius: 4px !important;
-    padding: 8px 12px !important;
-    font-size: 13px !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
-    @apply focus:outline-none focus:border-b24-blue w-full;
-  }
-  .input-field:focus {
-    border-color: #2fc6f6 !important;
-    box-shadow: 0 0 0 3px rgba(47, 198, 246, 0.15) !important;
-  }
-
-  .select-field {
-    background: #ffffff !important;
-    border: 1px solid #c6cdd3 !important;
-    color: #333333 !important;
-    border-radius: 4px !important;
-    padding: 8px 12px !important;
-    font-size: 13px !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
-    @apply focus:outline-none focus:border-b24-blue w-full cursor-pointer;
-  }
-  .select-field:focus {
-    border-color: #2fc6f6 !important;
-    box-shadow: 0 0 0 3px rgba(47, 198, 246, 0.15) !important;
-  }
-
-  .badge-active {
-    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-green-light text-b24-green border border-b24-green/20;
-  }
-  .badge-inactive {
-    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-red-light text-b24-red border border-b24-red/20;
-  }
-  .badge-pending {
-    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-orange-light text-b24-orange border border-b24-orange/20;
-  }
-
-  .page-header {
-    background: rgba(255, 255, 255, 0.3) !important;
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.01) !important;
-    @apply px-8 py-5;
-  }
-
-  /* Bitrix24 Native Table Styles */
-  .table-header {
-    background: #f1f5f7 !important;
-    color: #535c69 !important;
-    font-weight: 700 !important;
-    font-size: 11px !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    border-bottom: 2px solid #eef2f4 !important;
-  }
+/* ── Typography helpers ── */
+.b24-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--b24-text-muted);
+}
+.b24-legend {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--b24-text);
+  line-height: 1.1;
 }
 
-/* Glassmorphism sidebar overrides */
-.bg-b24-sidebar {
-  background: rgba(30, 41, 59, 0.75) !important;
-  backdrop-filter: blur(25px) saturate(110%) !important;
-  -webkit-backdrop-filter: blur(25px) saturate(110%) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+/* ── Cards ── */
+.b24-card {
+  background: var(--b24-card-bg);
+  border: 1px solid var(--b24-border);
+  border-radius: var(--b24-radius-lg);
+  box-shadow: var(--b24-shadow-card);
+  overflow: hidden;
+}
+.b24-card-alt {
+  background: var(--b24-card-alt);
+  border: 1px solid var(--b24-border);
+  border-radius: var(--b24-radius-lg);
+  box-shadow: var(--b24-shadow-card);
+  overflow: hidden;
+}
+/* Section grouping — top card + bottom card (like template's rounded-t/b-3xl pattern) */
+.b24-section-top {
+  background: var(--b24-card-alt);
+  border: 1px solid var(--b24-border);
+  border-radius: var(--b24-radius-lg) var(--b24-radius-lg) 0 0;
+  border-bottom: none;
+  padding: 18px 24px;
+}
+.b24-section-body {
+  background: var(--b24-card-bg);
+  border: 1px solid var(--b24-border);
+  border-radius: 0 0 var(--b24-radius-lg) var(--b24-radius-lg);
+  border-top: 1px solid var(--b24-border-light);
+  overflow: hidden;
 }
 
-/* Background gradient visibility */
-.bg-b24-bg {
-  background: transparent !important;
+/* ── Page header / Navbar ── */
+.b24-navbar {
+  background: var(--b24-card-bg);
+  border-bottom: 1px solid var(--b24-border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.b24-toolbar {
+  background: var(--b24-card-bg);
+  border-bottom: 1px solid var(--b24-border-light);
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-/* Glassy Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ── Buttons ── */
+.b24-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 32px;
+  border-radius: var(--b24-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, box-shadow 0.12s, border-color 0.12s;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  line-height: 1;
 }
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+.b24-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* air-primary */
+.b24-btn-primary {
+  background: var(--b24-primary);
+  color: #fff;
+  border-color: var(--b24-primary);
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(83, 92, 105, 0.3);
+.b24-btn-primary:hover:not(:disabled) {
+  background: #1a57a0;
+  border-color: #1a57a0;
+  box-shadow: 0 2px 8px rgba(32,102,176,0.25);
+}
+
+/* air-secondary */
+.b24-btn-secondary {
+  background: #ffffff;
+  color: var(--b24-text-muted);
+  border-color: var(--b24-border);
+}
+.b24-btn-secondary:hover:not(:disabled) {
+  background: var(--b24-card-alt);
+  border-color: #c4c9d0;
+  color: var(--b24-text);
+}
+
+/* air-tertiary-no-accent (ghost) */
+.b24-btn-ghost {
+  background: transparent;
+  color: var(--b24-text-muted);
+  border-color: transparent;
+}
+.b24-btn-ghost:hover:not(:disabled) {
+  background: var(--b24-card-alt);
+  color: var(--b24-text);
+}
+
+/* ── Inputs ── */
+.b24-input {
+  display: block;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #c8ced4;
+  border-radius: var(--b24-radius-sm);
+  padding: 0 10px;
+  height: 32px;
+  font-size: 13px;
+  color: var(--b24-text);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.b24-input:focus {
+  border-color: var(--b24-primary);
+  box-shadow: 0 0 0 3px var(--b24-primary-bg);
+}
+.b24-input::placeholder { color: var(--b24-text-light); }
+
+.b24-select {
+  display: block;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #c8ced4;
+  border-radius: var(--b24-radius-sm);
+  padding: 0 10px;
+  height: 32px;
+  font-size: 13px;
+  color: var(--b24-text);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  appearance: auto;
+}
+.b24-select:focus {
+  border-color: var(--b24-primary);
+  box-shadow: 0 0 0 3px var(--b24-primary-bg);
+}
+
+/* ── Badges ── */
+.b24-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
   border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(83, 92, 105, 0.5);
+.b24-badge-success {
+  background: var(--b24-green-bg);
+  color: var(--b24-green);
+  border: 1px solid var(--b24-green-ring);
 }
+.b24-badge-alert {
+  background: var(--b24-red-bg);
+  color: var(--b24-red);
+  border: 1px solid var(--b24-red-ring);
+}
+.b24-badge-warning {
+  background: var(--b24-orange-bg);
+  color: var(--b24-orange);
+  border: 1px solid var(--b24-orange-ring);
+}
+.b24-badge-neutral {
+  background: rgba(107,122,141,0.08);
+  color: var(--b24-text-muted);
+  border: 1px solid rgba(107,122,141,0.18);
+}
+.b24-badge-primary {
+  background: var(--b24-primary-bg);
+  color: var(--b24-primary);
+  border: 1px solid var(--b24-primary-ring);
+}
+
+/* ── Stat icon container (rounded-full bg-primary/10 ring ring-inset) ── */
+.b24-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Table ── */
+.b24-table { width: 100%; }
+.b24-table thead tr {
+  background: var(--b24-card-alt);
+}
+.b24-table thead th {
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--b24-text-muted);
+  border-bottom: 1px solid var(--b24-border);
+  text-align: left;
+  white-space: nowrap;
+}
+.b24-table tbody tr {
+  border-bottom: 1px solid var(--b24-border-light);
+  transition: background 0.1s;
+}
+.b24-table tbody tr:last-child { border-bottom: none; }
+.b24-table tbody tr:hover { background: var(--b24-card-alt); }
+.b24-table tbody td {
+  padding: 11px 16px;
+  font-size: 13px;
+  color: var(--b24-text);
+  vertical-align: middle;
+}
+
+/* ── Form row (settings pattern) ── */
+.b24-form-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--b24-border-light);
+  gap: 16px;
+}
+.b24-form-row:last-child { border-bottom: none; }
+
+/* ── Toggle switch ── */
+.b24-toggle {
+  position: relative;
+  width: 42px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.b24-toggle-knob {
+  position: absolute;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: left 0.2s;
+}
+
+/* ── Separator ── */
+.b24-separator {
+  height: 1px;
+  background: var(--b24-border-light);
+  margin: 0;
+}
+
+/* ── Sidebar nav item hover ── */
+.b24-nav-item:hover {
+  background: var(--b24-card-alt) !important;
+  color: var(--b24-text) !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c8ced4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8b0b8; }
+
+/* ── Spinner animation ── */
+@keyframes b24-spin { to { transform: rotate(360deg); } }
+.b24-spin { animation: b24-spin 0.8s linear infinite; }

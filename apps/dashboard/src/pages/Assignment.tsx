@@ -23,7 +23,11 @@ interface BitrixDept { id: string; name: string; }
 
 const DEFAULT_TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
 const AVATAR_COLORS = ['#1587fa','#1cae6a','#e09800','#9b59b6','#e74c3c','#1abc9c','#e67e22'];
-const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+const avatarColor = (name: string) => {
+  if (!name) return AVATAR_COLORS[0];
+  const code = name.charCodeAt(0);
+  return AVATAR_COLORS[isNaN(code) ? 0 : code % AVATAR_COLORS.length];
+};
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 const Tip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
@@ -53,7 +57,7 @@ const MemberRow: React.FC<{
   saving: string | null;
 }> = ({ agent, index, onToggle, onDelete, saving }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: agent.id });
-  const initials = agent.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials = (agent.name || '').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
     <div
@@ -193,7 +197,7 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[]; teams: st
         setUsers(d.users || []);
         setDepartments(d.departments || []);
         const b2cDept = (d.departments || []).find((dep: BitrixDept) =>
-          dep.name.toLowerCase().includes('b2c') || dep.name.toLowerCase().includes('b 2 c')
+          (dep.name || '').toLowerCase().includes('b2c') || (dep.name || '').toLowerCase().includes('b 2 c')
         );
         if (b2cDept) setDeptFilter(b2cDept.id);
         setUsersError('');
@@ -207,7 +211,7 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[]; teams: st
     return users.filter(u =>
       u.active &&
       !existingIds.includes(u.id) &&
-      (u.name.toLowerCase().includes(q) || u.department_name?.toLowerCase().includes(q)) &&
+      ((u.name || '').toLowerCase().includes(q) || (u.department_name || '').toLowerCase().includes(q)) &&
       (!deptFilter || u.department_id === deptFilter)
     );
   }, [users, search, existingIds, deptFilter]);

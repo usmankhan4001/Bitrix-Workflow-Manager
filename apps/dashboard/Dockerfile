@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
 # Empty string = relative URL, nginx proxies /api/ to the api container
 ENV VITE_API_URL=""

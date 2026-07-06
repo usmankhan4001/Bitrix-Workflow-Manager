@@ -21,6 +21,14 @@ export class WhatsappService {
       return false;
     }
 
+    // OnCloud expects a bare international number (country code + number, digits only).
+    // Strip '+', spaces, dashes, parentheses — these are the most common rejection cause.
+    const normalizedPhone = phone.replace(/[^\d]/g, '');
+    if (!normalizedPhone) {
+      this.logger.warn(`WhatsApp skipped — invalid phone "${phone}"`);
+      return false;
+    }
+
     const components = [
       {
         type: 'body',
@@ -34,7 +42,7 @@ export class WhatsappService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          phone,
+          phone: normalizedPhone,
           template_name: templateName,
           template_language: templateLanguage,
           components,
@@ -42,10 +50,10 @@ export class WhatsappService {
       });
       const data = (await res.json()) as any;
       if (data.status === 'success' || data.message_id) {
-        this.logger.log(`WhatsApp sent to ${phone} via template "${templateName}"`);
+        this.logger.log(`WhatsApp sent to ${normalizedPhone} via template "${templateName}"`);
         return true;
       }
-      this.logger.warn(`WhatsApp API non-success: ${JSON.stringify(data)}`);
+      this.logger.warn(`WhatsApp API non-success for ${normalizedPhone} (template "${templateName}"): ${JSON.stringify(data)}`);
       return false;
     } catch (err) {
       this.logger.error(`WhatsApp send failed: ${(err as Error).message}`);

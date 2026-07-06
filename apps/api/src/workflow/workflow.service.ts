@@ -11,25 +11,13 @@ const SETTING_DEFAULTS: Record<string, string> = {
   ONCLOUD_OVERDUE_TEMPLATE: 'lead_overdue',
   ONCLOUD_TEMPLATE_LANGUAGE: 'en',
   SLA_HOURS: '24',
-  EXCLUDED_SOURCES: '[]',
+  ALLOWED_SOURCES: '[]',              // JSON array of source IDs eligible for assignment; empty = all sources allowed
   WORKFLOW_MANAGER_ID: '1',
   MAX_TASKS_BEFORE_ESCALATION: '2',
   WORKFLOW_ENABLED: 'true',            // master on/off switch — set to 'false' to pause all lead assignment
   // Assignment scope
   LEAD_ASSIGNMENT_TEAM: 'B2C',        // rotation team that receives incoming leads
   ELIGIBLE_DEPT_IDS: '[]',            // JSON array of Bitrix24 dept IDs eligible for assignment; empty = no restriction
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  CALL: 'Phone Call',
-  EMAIL: 'Email',
-  WEB: 'Website',
-  ADVERTISING: 'Advertisement',
-  PARTNER: 'Partner',
-  RECOMMENDATION: 'Referral',
-  TRADE_SHOW: 'Trade Show',
-  SELF: 'Self',
-  OTHER: 'Other',
 };
 
 interface LeadDetails {
@@ -217,17 +205,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return currentMins >= startMins && currentMins < endMins;
   }
 
-  // ─── GAP 3: Source exclusion ───────────────────────────────────────────────
-
-  isSourceExcluded(sourceId: string, settings: Record<string, string>): boolean {
-    if (!sourceId) return false;
-    try {
-      const excluded: string[] = JSON.parse(settings.EXCLUDED_SOURCES || '[]');
-      return excluded.map((s) => s.toUpperCase()).includes(sourceId.toUpperCase());
-    } catch {
-      return false;
-    }
-  }
+  // ─── Source allow-list ─────────────────────────────────────────────────────
 
   isSourceAllowed(sourceId: string, settings: Record<string, string>): boolean {
     const allowedRaw = settings.ALLOWED_SOURCES || '[]';
@@ -236,6 +214,33 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     if (allowed.length === 0) return true;
     if (!sourceId) return false;
     return allowed.map((s) => s.toUpperCase()).includes(sourceId.toUpperCase());
+  }
+
+  // ─── Bitrix24: Source labels (live, cached) ────────────────────────────────
+  // Replaces the old hardcoded SOURCE_LABELS map. Pulls human-readable names from
+  // crm.status.list (ENTITY_ID=SOURCE) and caches them so we don't hit Bitrix on
+  // every lead. Cache refreshes every 30 minutes.
+
+  private sourceLabelCache: { labels: Record<string, string>; fetchedAt: number } | null = null;
+  private readonly SOURCE_LABEL_TTL_MS = 30 * 60 * 1000;
+
+  private async getSourceLabels(creds: BitrixCreds): Promise<Record<string, string>> {
+    if (this.sourceLabelCache && Date.now() - this.sourceLabelCache.fetchedAt < this.SOURCE_LABEL_TTL_MS) {
+      return this.sourceLabelCache.labels;
+    }
+    try {
+      const sep = this.bitrixUrl('crm.status.list', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('crm.status.list', creds)}${sep}filter[ENTITY_ID]=SOURCE`;
+      const res = await fetch(url);
+      const data = (await res.json()) as any;
+      const labels: Record<string, string> = {};
+      for (const s of data.result || []) labels[s.STATUS_ID] = s.NAME;
+      this.sourceLabelCache = { labels, fetchedAt: Date.now() };
+      return labels;
+    } catch (err) {
+      this.logger.warn(`getSourceLabels failed: ${(err as Error).message}`);
+      return this.sourceLabelCache?.labels || {};
+    }
   }
 
   // ─── Bitrix24: Lead details ────────────────────────────────────────────────
@@ -252,7 +257,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       const contactName = [lead.NAME, lead.LAST_NAME].filter(Boolean).join(' ').trim();
       const displayName = contactName || lead.COMPANY_TITLE || lead.TITLE || `Lead #${leadId}`;
       const sourceId = lead.SOURCE_ID || '';
-      const sourceLabel = SOURCE_LABELS[sourceId] || lead.SOURCE_DESCRIPTION || sourceId || 'CRM';
+      const sourceLabels = await this.getSourceLabels(creds);
+      const sourceLabel = sourceLabels[sourceId] || lead.SOURCE_DESCRIPTION || sourceId || 'CRM';
 
       return {
         name: displayName,
@@ -279,56 +285,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return data.result?.tasks?.length ?? 0;
     } catch {
       return 0;
-    }
-  }
-
-  // ─── Bitrix24: Users & Departments ────────────────────────────────────────
-
-  async fetchBitrixUsers(accessToken: string, domain: string): Promise<any[]> {
-    const creds: BitrixCreds = { accessToken, domain };
-    try {
-      const deptRes = await fetch(this.bitrixUrl('department.get', creds));
-      const deptData = (await deptRes.json()) as any;
-      const departments: Record<number, string> = {};
-      if (deptData.result) {
-        for (const dept of deptData.result) departments[dept.ID] = dept.NAME;
-      }
-
-      const users: any[] = [];
-      let start = 0;
-      while (true) {
-        const userSep = this.bitrixUrl('user.get', creds).includes('?') ? '&' : '?';
-        const res = await fetch(`${this.bitrixUrl('user.get', creds)}${userSep}ACTIVE=Y&start=${start}`);
-        const data = (await res.json()) as any;
-        if (!data.result?.length) break;
-        users.push(...data.result);
-        if (!data.next) break;
-        start = data.next;
-      }
-
-      return users.map((u) => ({
-        id: String(u.ID),
-        name: `${u.NAME || ''} ${u.LAST_NAME || ''}`.trim(),
-        email: u.EMAIL || '',
-        department_id: u.UF_DEPARTMENT?.[0] || null,
-        department_name: u.UF_DEPARTMENT?.[0] ? departments[u.UF_DEPARTMENT[0]] || 'Unknown' : 'No Department',
-        phone: u.PERSONAL_MOBILE || u.WORK_PHONE || '',
-        active: u.ACTIVE === true || u.ACTIVE === 'Y',
-      }));
-    } catch (err) {
-      this.logger.error(`fetchBitrixUsers failed: ${(err as Error).message}`);
-      return [];
-    }
-  }
-
-  async fetchBitrixDepartments(accessToken: string, domain: string): Promise<any[]> {
-    try {
-      const res = await fetch(`https://${domain}/rest/department.get.json?auth=${accessToken}`);
-      const data = (await res.json()) as any;
-      return (data.result || []).map((d: any) => ({ id: String(d.ID), name: d.NAME, parent: d.PARENT }));
-    } catch (err) {
-      this.logger.error(`fetchBitrixDepartments failed: ${(err as Error).message}`);
-      return [];
     }
   }
 
@@ -375,7 +331,9 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       body.append('fields[TITLE]', titleOverride || `Follow up: ${leadName}`);
       body.append('fields[DESCRIPTION]', descriptionOverride || `Please contact ${leadName} and update the lead status in Bitrix24 within ${deadlineHours} hours.`);
       body.append('fields[RESPONSIBLE_ID]', assigneeUserId);
-      body.append('fields[CREATED_BY]', assigneeUserId);
+      // NOTE: CREATED_BY is intentionally left unset so the task is created by the
+      // webhook/integration account. Setting it to another user makes Bitrix reject
+      // tasks.task.add unless that account has impersonation rights.
       body.append('fields[DEADLINE]', deadline);
       body.append('fields[UF_CRM_TASK][0]', `L_${leadId}`);
       body.append('fields[ALLOW_CHANGE_DEADLINE]', 'N');
@@ -454,13 +412,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return { success: true, queued: true, message: 'Outside business hours, lead queued.' };
     }
 
-    // Gap 3: Skip excluded sources
+    // Skip sources outside the allow-list (empty list = all allowed)
     const lead = await this.fetchLeadDetails(leadId, creds);
-    if (!force && this.isSourceExcluded(lead.sourceId, settings)) {
-      this.logger.log(`Lead #${leadId} skipped — source "${lead.sourceId}" is excluded`);
-      await this.lateLead.updateMany({ where: { lead_id: leadId }, data: { processed: true, processed_at: new Date() } });
-      return { success: true, skipped: true, message: `Source "${lead.sourceId}" is excluded` };
-    }
     if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
       this.logger.log(`Lead #${leadId} skipped — source "${lead.sourceId}" is not allowed`);
       await this.lateLead.updateMany({ where: { lead_id: leadId }, data: { processed: true, processed_at: new Date() } });
@@ -668,31 +621,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
 
     return { action: 'received' };
-  }
-
-  async handleSlaBreachCheck(leadId: string, leadName: string, source: string, assignedAt: Date): Promise<void> {
-    const settings = await this.getSettings();
-    if (settings.WHATSAPP_ENABLED !== 'true') return;
-    const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
-    if (new Date() < new Date(assignedAt.getTime() + slaHours * 3600 * 1000)) return;
-
-    const lastAssignment = await this.assignmentLog.findFirst({
-      where: { lead_id: leadId },
-      orderBy: { assigned_at: 'desc' },
-    });
-    if (!lastAssignment) return;
-
-    const agent = await this.agent.findUnique({ where: { id: lastAssignment.agent_id } });
-    if (agent?.whatsapp_phone) {
-      await this.whatsapp.sendOverdueNotification(
-        agent.whatsapp_phone,
-        agent.name.split(' ')[0],
-        leadName,
-        source,
-        settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
-        settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-      );
-    }
   }
 
   async fetchWorkflowManagerTasks(leadId: string, managerId: string, creds: BitrixCreds): Promise<string[]> {

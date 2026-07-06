@@ -14,6 +14,7 @@ export class WhatsappService {
     templateName: string,
     templateLanguage: string,
     bodyParams: string[],
+    buttonUrlParam?: string,
   ): Promise<boolean> {
     const token = this.getToken();
     if (!token) {
@@ -29,12 +30,29 @@ export class WhatsappService {
       return false;
     }
 
-    const components = [
+    const components: any[] = [
       {
         type: 'body',
         parameters: bodyParams.map((text) => ({ type: 'text', text })),
       },
     ];
+
+    if (buttonUrlParam) {
+      const normalizedButtonParam = buttonUrlParam.replace(/[^\d]/g, '');
+      if (normalizedButtonParam) {
+        components.push({
+          type: 'button',
+          sub_type: 'url',
+          index: '0',
+          parameters: [
+            {
+              type: 'text',
+              text: normalizedButtonParam,
+            },
+          ],
+        });
+      }
+    }
 
     try {
       const res = await fetch(`${this.baseUrl}/api/wpbox/sendtemplatemessage`, {
@@ -69,12 +87,15 @@ export class WhatsappService {
     source: string,
     templateName: string,
     templateLanguage = 'en',
+    leadPhone?: string,
   ): Promise<boolean> {
-    return this.sendTemplateMessage(agentPhone, templateName, templateLanguage, [
-      agentFirstName,
-      leadName,
-      source,
-    ]);
+    return this.sendTemplateMessage(
+      agentPhone,
+      templateName,
+      templateLanguage,
+      [agentFirstName, leadName, source],
+      leadPhone,
+    );
   }
 
   // Params sent: {{1}} Agent first name  {{2}} Lead name/title  {{3}} Source
@@ -85,12 +106,15 @@ export class WhatsappService {
     source: string,
     templateName: string,
     templateLanguage = 'en',
+    leadPhone?: string,
   ): Promise<boolean> {
-    return this.sendTemplateMessage(agentPhone, templateName, templateLanguage, [
-      agentFirstName,
-      leadName,
-      source,
-    ]);
+    return this.sendTemplateMessage(
+      agentPhone,
+      templateName,
+      templateLanguage,
+      [agentFirstName, leadName, source],
+      leadPhone,
+    );
   }
 
   async testConnection(_phone: string): Promise<{ success: boolean; message: string }> {

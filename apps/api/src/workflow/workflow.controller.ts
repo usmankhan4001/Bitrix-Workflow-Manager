@@ -81,23 +81,40 @@ export class WorkflowController {
   getTeams() { return this.workflowService.getTeams(); }
 
   // ─── Lead Assignment ───────────────────────────────────────────────────────
+  // Accepts the lead ID from the JSON body, a query string, or a Bitrix24 event
+  // payload (data.FIELDS.ID). Exposed on both POST and GET so it works regardless
+  // of how the Bitrix24 outbound-webhook automation rule sends the request.
 
   @Post('assign-lead')
-  async assignLead(@Body() body: any) {
-    const leadId = body.lead_id || body.data?.FIELDS?.ID;
+  async assignLeadPost(@Body() body: any, @Query() query: any) {
+    return this.runAssignLead(body || {}, query || {});
+  }
 
-    // Use body team if provided, otherwise read from settings so it's configurable
-    let team = body.team;
+  @Get('assign-lead')
+  async assignLeadGet(@Query() query: any) {
+    return this.runAssignLead({}, query || {});
+  }
+
+  private async runAssignLead(body: any, query: any) {
+    const leadId = body.lead_id || query.lead_id || query.id || body.data?.FIELDS?.ID;
+    if (!leadId) {
+      return { success: false, message: 'No lead_id provided in body or query' };
+    }
+
+    // Use body/query team if provided, otherwise read from settings so it's configurable
+    let team = body.team || query.team;
     if (!team) {
       const settings = await this.workflowService.getSettings();
       team = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
     }
 
+    const force = body.force === true || body.force === 'true' || query.force === 'true';
+
     return this.workflowService.processLeadAssignment(
-      leadId,
+      String(leadId),
       team,
       (this.workflowService as any).getWebhookCreds(),
-      body.force === true || body.force === 'true',
+      force,
     );
   }
 

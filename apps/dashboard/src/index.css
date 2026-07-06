@@ -2,21 +2,21 @@
 
 @theme {
   /* Bitrix24 Sidebar (glass-dark background) */
-  --color-b24-sidebar: rgba(26, 35, 50, 0.65);
-  --color-b24-sidebar-hover: rgba(255, 255, 255, 0.1);
-  --color-b24-sidebar-active: rgba(45, 188, 245, 0.25);
+  --color-b24-sidebar: rgba(30, 41, 59, 0.75);
+  --color-b24-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --color-b24-sidebar-active: rgba(45, 188, 245, 0.2);
   --color-b24-sidebar-text: #e2e8f0;
   --color-b24-sidebar-text-muted: #94a3b8;
 
   /* Bitrix24 Content Area (light glassy backdrops) */
   --color-b24-bg: #eef2f5;
-  --color-b24-surface: rgba(255, 255, 255, 0.65);
-  --color-b24-surface2: rgba(255, 255, 255, 0.45);
+  --color-b24-surface: rgba(255, 255, 255, 0.45);
+  --color-b24-surface2: rgba(255, 255, 255, 0.25);
 
   /* Bitrix24 Primary Colors */
-  --color-b24-blue: #2dbcf5;
-  --color-b24-blue-dark: #00aeef;
-  --color-b24-blue-light: rgba(45, 188, 245, 0.15);
+  --color-b24-blue: #2fc6f6;
+  --color-b24-blue-dark: #1eb5e5;
+  --color-b24-blue-light: rgba(47, 198, 246, 0.15);
   --color-b24-green: #75c900;
   --color-b24-green-light: rgba(117, 201, 0, 0.15);
   --color-b24-orange: #ff7e00;
@@ -26,86 +26,172 @@
   --color-b24-yellow: #f5c400;
 
   /* Typography */
-  --color-b24-text: #1e293b;
-  --color-b24-text-muted: #64748b;
-  --color-b24-text-light: #94a3b8;
+  --color-b24-text: #333333;
+  --color-b24-text-muted: #535c69;
+  --color-b24-text-light: #8b96a8;
 
   /* Borders */
   --color-b24-border: rgba(255, 255, 255, 0.45);
   --color-b24-border-light: rgba(255, 255, 255, 0.25);
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Open Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 @layer base {
   body {
-    background: linear-gradient(135deg, #cceeff 0%, #e0e8ff 45%, #fbe8ff 100%) !important;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(206, 238, 255, 0.8) 0px, transparent 50%),
+      radial-gradient(at 50% 0%, rgba(224, 232, 255, 0.8) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(251, 232, 255, 0.8) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(255, 235, 230, 0.8) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(224, 242, 254, 0.8) 0px, transparent 50%),
+      linear-gradient(135deg, #f0f6fa 0%, #e1e9f0 100%) !important;
     background-attachment: fixed !important;
+    background-size: cover !important;
     @apply text-b24-text font-sans antialiased min-h-screen;
   }
 }
 
 @layer components {
+  /* Bitrix24 Native style UI Buttons */
   .btn-primary {
-    @apply bg-b24-blue text-white px-4 py-2 rounded font-medium text-sm transition-all hover:bg-b24-blue-dark shadow-sm hover:shadow active:scale-95 focus:outline-none cursor-pointer;
+    background-color: #2fc6f6 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    padding: 10px 20px !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 6px rgba(47, 198, 246, 0.2) !important;
+    transition: all 0.2s ease !important;
+    border: none !important;
+    @apply focus:outline-none cursor-pointer;
   }
+  .btn-primary:hover {
+    background-color: #1eb5e5 !important;
+    box-shadow: 0 4px 12px rgba(47, 198, 246, 0.3) !important;
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+    scale: 0.98;
+  }
+
   .btn-secondary {
-    background: rgba(255, 255, 255, 0.6) !important;
-    backdrop-filter: blur(4px);
-    @apply text-b24-text border border-b24-border px-4 py-2 rounded font-medium text-sm transition-all hover:bg-white/80 shadow-sm active:scale-95 focus:outline-none cursor-pointer;
+    background: #ffffff !important;
+    border: 1px solid #c6cdd3 !important;
+    color: #535c69 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    padding: 10px 20px !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    @apply focus:outline-none cursor-pointer;
   }
+  .btn-secondary:hover {
+    background: #f7f9fb !important;
+    border-color: #aeb6be !important;
+    color: #333333 !important;
+  }
+  .btn-secondary:active {
+    scale: 0.98;
+  }
+
   .btn-danger {
-    @apply bg-b24-red/10 text-b24-red border border-b24-red/30 px-3 py-1.5 rounded text-xs font-semibold transition-all hover:bg-b24-red hover:text-white cursor-pointer;
+    background: rgba(255, 87, 82, 0.1) !important;
+    border: 1px solid rgba(255, 87, 82, 0.25) !important;
+    color: #ff5752 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+    @apply hover:bg-b24-red hover:text-white cursor-pointer;
   }
+
+  /* Glassmorphism Panel */
   .card {
-    background: rgba(255, 255, 255, 0.7) !important;
-    backdrop-filter: blur(12px) saturate(120%);
-    -webkit-backdrop-filter: blur(12px) saturate(120%);
-    border: 1px solid rgba(255, 255, 255, 0.45) !important;
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06) !important;
+    background: rgba(255, 255, 255, 0.55) !important;
+    backdrop-filter: blur(25px) saturate(125%);
+    -webkit-backdrop-filter: blur(25px) saturate(125%);
+    border: 1px solid rgba(255, 255, 255, 0.55) !important;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05) !important;
     border-radius: 12px !important;
   }
+
+  /* Bitrix24 Native Style Inputs */
   .input-field {
-    background: rgba(255, 255, 255, 0.75) !important;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
-    border-radius: 8px !important;
-    @apply px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full;
+    background: #ffffff !important;
+    border: 1px solid #c6cdd3 !important;
+    color: #333333 !important;
+    border-radius: 4px !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    @apply focus:outline-none focus:border-b24-blue w-full;
   }
+  .input-field:focus {
+    border-color: #2fc6f6 !important;
+    box-shadow: 0 0 0 3px rgba(47, 198, 246, 0.15) !important;
+  }
+
   .select-field {
-    background: rgba(255, 255, 255, 0.75) !important;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(0, 0, 0, 0.08) !important;
-    border-radius: 8px !important;
-    @apply px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full cursor-pointer;
+    background: #ffffff !important;
+    border: 1px solid #c6cdd3 !important;
+    color: #333333 !important;
+    border-radius: 4px !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    @apply focus:outline-none focus:border-b24-blue w-full cursor-pointer;
   }
+  .select-field:focus {
+    border-color: #2fc6f6 !important;
+    box-shadow: 0 0 0 3px rgba(47, 198, 246, 0.15) !important;
+  }
+
   .badge-active {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-green-light text-b24-green border border-b24-green/20;
+    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-green-light text-b24-green border border-b24-green/20;
   }
   .badge-inactive {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-red-light text-b24-red border border-b24-red/20;
+    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-red-light text-b24-red border border-b24-red/20;
   }
   .badge-pending {
-    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-b24-orange-light text-b24-orange border border-b24-orange/20;
+    @apply inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-b24-orange-light text-b24-orange border border-b24-orange/20;
   }
+
   .page-header {
-    background: rgba(255, 255, 255, 0.45) !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.35) !important;
+    background: rgba(255, 255, 255, 0.3) !important;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.01) !important;
     @apply px-8 py-5;
   }
+
+  /* Bitrix24 Native Table Styles */
   .table-header {
-    background: rgba(255, 255, 255, 0.35) !important;
-    @apply text-left text-xs font-semibold text-b24-text-muted uppercase tracking-wider border-b border-b24-border-light;
+    background: #f1f5f7 !important;
+    color: #535c69 !important;
+    font-weight: 700 !important;
+    font-size: 11px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    border-bottom: 2px solid #eef2f4 !important;
   }
 }
 
 /* Glassmorphism sidebar overrides */
 .bg-b24-sidebar {
-  background: rgba(26, 35, 50, 0.65) !important;
-  backdrop-filter: blur(16px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(130%) !important;
+  background: rgba(30, 41, 59, 0.75) !important;
+  backdrop-filter: blur(25px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(110%) !important;
   border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
@@ -123,9 +209,9 @@
   background: rgba(255, 255, 255, 0.05);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(83, 92, 105, 0.3);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(83, 92, 105, 0.5);
 }

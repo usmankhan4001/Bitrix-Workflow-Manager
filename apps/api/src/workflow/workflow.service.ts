@@ -171,13 +171,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   }
 
   async popFromCompletedQueue(team: string): Promise<any | null> {
-    // FIFO: get the earliest entry for this team
     const entry = await this.completedQueue.findFirst({
       where: { team },
       orderBy: { queued_at: 'asc' },
     });
     if (!entry) return null;
     await this.completedQueue.delete({ where: { id: entry.id } });
+    // Verify agent is still active before reassigning
+    const agent = await this.agent.findUnique({ where: { id: entry.agent_id } });
+    if (!agent || !agent.is_active) {
+      this.logger.log(`Skipped ${entry.agent_name} from completed queue — no longer active`);
+      return this.popFromCompletedQueue(team); // recurse to next entry
+    }
     this.logger.log(`Popped ${entry.agent_name} from completed queue for re-assignment`);
     return entry;
   }
@@ -228,7 +233,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   async fetchLeadDetails(leadId: string, creds: BitrixCreds): Promise<LeadDetails> {
     try {
-      const url = `${this.bitrixUrl('crm.lead.get', creds)}&id=${leadId}`;
+      const separator = this.bitrixUrl('crm.lead.get', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('crm.lead.get', creds)}${separator}id=${leadId}`;
       const res = await fetch(url);
       const data = (await res.json()) as any;
       const lead = data.result;
@@ -257,7 +263,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   async getTaskCountForLead(leadId: string, creds: BitrixCreds): Promise<number> {
     try {
-      const url = `${this.bitrixUrl('tasks.task.list', creds)}&filter[UF_CRM_TASK]=L_${leadId}&select[]=ID`;
+      const separator = this.bitrixUrl('tasks.task.list', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('tasks.task.list', creds)}${separator}filter[UF_CRM_TASK]=L_${leadId}&select[]=ID`;
       const res = await fetch(url);
       const data = (await res.json()) as any;
       return data.result?.tasks?.length ?? 0;
@@ -281,7 +288,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       const users: any[] = [];
       let start = 0;
       while (true) {
-        const res = await fetch(`${this.bitrixUrl('user.get', creds)}&ACTIVE=Y&start=${start}`);
+        const userSep = this.bitrixUrl('user.get', creds).includes('?') ? '&' : '?';
+        const res = await fetch(`${this.bitrixUrl('user.get', creds)}${userSep}ACTIVE=Y&start=${start}`);
         const data = (await res.json()) as any;
         if (!data.result?.length) break;
         users.push(...data.result);
@@ -388,8 +396,16 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // ─── Round-Robin Pick ──────────────────────────────────────────────────────
 
   async pickNextAgent(team: string): Promise<any | null> {
+    const settings = await this.getSettings();
+    let deptFilter: string[] = [];
+    try { deptFilter = JSON.parse(settings.ELIGIBLE_DEPT_IDS || '[]'); } catch {}
+
     const agents = await this.agent.findMany({
-      where: { team, is_active: true },
+      where: {
+        team,
+        is_active: true,
+        ...(deptFilter.length > 0 ? { department_id: { in: deptFilter } } : {}),
+      },
       orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
     });
     if (agents.length === 0) return null;
@@ -602,15 +618,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         );
 
         // WhatsApp to manager if configured
-        if (settings.WHATSAPP_ENABLED === 'true' && agent?.whatsapp_phone) {
-          await this.whatsapp.sendOverdueNotification(
-            agent.whatsapp_phone,
-            agent.name.split(' ')[0],
-            lead.name,
-            lead.source,
-            settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
-            settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-          );
+        if (settings.WHATSAPP_ENABLED === 'true') {
+          const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
+          const managerPhone = manager?.whatsapp_phone;
+          if (managerPhone) {
+            await this.whatsapp.sendOverdueNotification(
+              managerPhone,
+              manager.name.split(' ')[0],
+              lead.name,
+              lead.source,
+              settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
+              settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+            );
+          }
         }
         return { action: 'escalated', detail: `Escalated to manager ID ${managerId}` };
       }
@@ -661,7 +681,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   async fetchWorkflowManagerTasks(leadId: string, managerId: string, creds: BitrixCreds): Promise<string[]> {
     try {
-      const url = `${this.bitrixUrl('tasks.task.list', creds)}&filter[UF_CRM_TASK]=L_${leadId}&filter[RESPONSIBLE_ID]=${managerId}&select[]=ID`;
+      const mgrSep = this.bitrixUrl('tasks.task.list', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('tasks.task.list', creds)}${mgrSep}filter[UF_CRM_TASK]=L_${leadId}&filter[RESPONSIBLE_ID]=${managerId}&select[]=ID`;
       const res = await fetch(url);
       const data = (await res.json()) as any;
       const tasks = data.result?.tasks || [];
@@ -712,5 +733,89 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
 
     return { action: 'ignored', detail: 'Not a manager reassignment' };
+  }
+
+  // ─── Dashboard Status (combined snapshot for the UI) ────────────────────────
+
+  async getWorkflowStatus(): Promise<any> {
+    const settings = await this.getSettings();
+    const team = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+    const engineEnabled = settings.WORKFLOW_ENABLED !== 'false';
+
+    // Get agents for the active team
+    let deptFilter: string[] = [];
+    try { deptFilter = JSON.parse(settings.ELIGIBLE_DEPT_IDS || '[]'); } catch {}
+    const agents = await this.agent.findMany({
+      where: {
+        team,
+        is_active: true,
+        ...(deptFilter.length > 0 ? { department_id: { in: deptFilter } } : {}),
+      },
+      orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
+    });
+
+    const totalAgents = await this.agent.count({ where: { team } });
+
+    // Find last assignment and next agent
+    const lastLog = await this.assignmentLog.findFirst({
+      where: { team },
+      orderBy: { assigned_at: 'desc' },
+    });
+
+    let lastAssigned: any = null;
+    let nextAgent: any = null;
+    if (lastLog) {
+      lastAssigned = { id: lastLog.agent_id, name: lastLog.agent_name };
+      const lastIdx = agents.findIndex(a => a.id === lastLog.agent_id);
+      const nextIdx = (lastIdx + 1) % agents.length;
+      if (agents[nextIdx]) {
+        nextAgent = { id: agents[nextIdx].id, name: agents[nextIdx].name };
+      }
+    } else if (agents.length > 0) {
+      nextAgent = { id: agents[0].id, name: agents[0].name };
+    }
+
+    // Queue depth
+    const queueDepth = await this.lateLead.count({ where: { processed: false } });
+
+    // Assigned today count
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const assignedToday = await this.assignmentLog.count({ where: { assigned_at: { gte: midnight } } });
+
+    // Per-agent workload today
+    const todayLogs = await this.assignmentLog.findMany({ where: { assigned_at: { gte: midnight } } });
+    const workloadMap: Record<string, { name: string; count: number }> = {};
+    for (const log of todayLogs) {
+      if (!workloadMap[log.agent_id]) workloadMap[log.agent_id] = { name: log.agent_name, count: 0 };
+      workloadMap[log.agent_id].count++;
+    }
+    const agentWorkload = Object.values(workloadMap).sort((a, b) => b.count - a.count);
+
+    // Dynamic teams list
+    const allAgents = await this.agent.findMany({ select: { team: true } });
+    const teams = [...new Set(allAgents.map(a => a.team))].sort();
+
+    return {
+      engineEnabled,
+      assignmentTeam: team,
+      withinBusinessHours: this.isWithinBusinessHours(settings),
+      lastAssigned,
+      nextAgent,
+      activeAgentCount: agents.length,
+      totalAgentCount: totalAgents,
+      queueDepth,
+      assignedToday,
+      agentWorkload,
+      teams,
+      agents: agents.map(a => ({ id: a.id, name: a.name, team: a.team, is_active: a.is_active })),
+    };
+  }
+
+  // ─── Dynamic Teams ──────────────────────────────────────────────────────────
+
+  async getTeams(): Promise<string[]> {
+    const allAgents = await this.agent.findMany({ select: { team: true } });
+    return [...new Set(allAgents.map(a => a.team))].sort();
   }
 }

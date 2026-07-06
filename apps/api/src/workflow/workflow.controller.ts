@@ -86,6 +86,14 @@ export class WorkflowController {
     return { departments };
   }
 
+  // ─── Workflow Status (dashboard snapshot) ──────────────────────────────────
+
+  @Get('status')
+  getWorkflowStatus() { return this.workflowService.getWorkflowStatus(); }
+
+  @Get('teams')
+  getTeams() { return this.workflowService.getTeams(); }
+
   // ─── Lead Assignment ───────────────────────────────────────────────────────
 
   @Post('assign-lead')

@@ -21,7 +21,7 @@ interface BitrixUser {
 }
 interface BitrixDept { id: string; name: string; }
 
-const TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
+const DEFAULT_TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
 const AVATAR_COLORS = ['#1587fa','#1cae6a','#e09800','#9b59b6','#e74c3c','#1abc9c','#e67e22'];
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 
@@ -163,7 +163,7 @@ const MemberRow: React.FC<{
 };
 
 // ── Add Person Panel (right column) ──────────────────────────────────────────
-const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ onAdded, existingIds }) => {
+const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[]; teams: string[] }> = ({ onAdded, existingIds, teams }) => {
   const [users, setUsers] = useState<BitrixUser[]>([]);
   const [departments, setDepartments] = useState<BitrixDept[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,10 +171,16 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [selected, setSelected] = useState('');
-  const [team, setTeam] = useState(TEAMS[0]);
+  const [team, setTeam] = useState('B2C');
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (teams && teams.length > 0) {
+      setTeam(teams[0]);
+    }
+  }, [teams]);
 
   useEffect(() => {
     fetch(`${API()}/api/bitrix/webhook-users`)
@@ -186,7 +192,6 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
       .then(d => {
         setUsers(d.users || []);
         setDepartments(d.departments || []);
-        // Pre-select the first dept that looks like B2C/sales if available
         const b2cDept = (d.departments || []).find((dep: BitrixDept) =>
           dep.name.toLowerCase().includes('b2c') || dep.name.toLowerCase().includes('b 2 c')
         );
@@ -246,8 +251,8 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* How it works */}
       <div style={{ background: 'var(--b24-primary-dim)', border: '1px solid var(--b24-primary-ring)', borderRadius: 8, padding: '12px 14px' }}>
-        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--b24-primary)', marginBottom: 6 }}>How assignment works</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--b24-primary)', marginBottom: 6, margin: 0 }}>How assignment works</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
           {['Lead arrives in Bitrix24', 'Person #1 gets assigned', 'Next lead → Person #2', 'Loops back to #1'].map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--b24-text-muted)' }}>
               <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--b24-primary)', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
@@ -255,13 +260,13 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: 'var(--b24-text-faint)', marginTop: 8 }}>Drag names on the left to change order.</p>
+        <p style={{ fontSize: 11, color: 'var(--b24-text-faint)', marginTop: 8, margin: '8px 0 0 0' }}>Drag names on the left to change order.</p>
       </div>
 
       {/* Add form */}
       <div className="b24-card" style={{ overflow: 'visible' }}>
         <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--b24-divider)' }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)' }}>Add to rotation</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', margin: 0 }}>Add to rotation</p>
         </div>
         <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* Search + select */}
@@ -313,7 +318,7 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--b24-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Group</label>
             <select className="b24-select" value={team} onChange={e => setTeam(e.target.value)}>
-              {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+              {teams.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
 
@@ -337,27 +342,52 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[] }> = ({ on
 // ── Main Page ─────────────────────────────────────────────────────────────────
 const Assignment: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [teams, setTeams] = useState<string[]>(DEFAULT_TEAMS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [filterTeam, setFilterTeam] = useState('All');
 
-  const fetchAgents = async () => {
+  const fetchAgentsAndTeams = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API()}/api/workflow/agents`);
-      if (r.ok) setAgents(await r.json());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      const base = API();
+      const [resAgents, resTeams] = await Promise.all([
+        fetch(`${base}/api/workflow/agents`),
+        fetch(`${base}/api/workflow/teams`),
+      ]);
+
+      let loadedAgents: Agent[] = [];
+      if (resAgents.ok) {
+        loadedAgents = await resAgents.json();
+        setAgents(loadedAgents);
+      }
+
+      if (resTeams.ok) {
+        const loadedTeams = await resTeams.json();
+        if (loadedTeams && loadedTeams.length > 0) {
+          setTeams(loadedTeams);
+        } else {
+          const uniqueTeams = Array.from(new Set(loadedAgents.map(a => a.team)));
+          setTeams(uniqueTeams.length > 0 ? uniqueTeams : DEFAULT_TEAMS);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchAgents(); }, []);
+  useEffect(() => {
+    fetchAgentsAndTeams();
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const allTeams = useMemo(() => ['All', ...Array.from(new Set(agents.map(a => a.team)))], [agents]);
+  const allTeams = useMemo(() => ['All', ...teams], [teams]);
   const displayed = filterTeam === 'All' ? agents : agents.filter(a => a.team === filterTeam);
   const activeCount = agents.filter(a => a.is_active).length;
 
@@ -373,7 +403,7 @@ const Assignment: React.FC = () => {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderedIds: reordered.map(a => a.id) }),
       });
-    } catch (e) { console.error(e); fetchAgents(); }
+    } catch (e) { console.error(e); fetchAgentsAndTeams(); }
   };
 
   const toggleActive = async (id: string, cur: boolean) => {
@@ -445,8 +475,8 @@ const Assignment: React.FC = () => {
               </div>
             ) : displayed.length === 0 ? (
               <div style={{ padding: '48px', textAlign: 'center' }}>
-                <p style={{ color: 'var(--b24-text-muted)', fontWeight: 600, marginBottom: 4 }}>No one added yet</p>
-                <p style={{ color: 'var(--b24-text-faint)', fontSize: 12 }}>Use the panel on the right to add team members.</p>
+                <p style={{ color: 'var(--b24-text-muted)', fontWeight: 600, marginBottom: 4, margin: 0 }}>No one added yet</p>
+                <p style={{ color: 'var(--b24-text-faint)', fontSize: 12, marginTop: 4, margin: 0 }}>Use the panel on the right to add team members.</p>
               </div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -460,7 +490,7 @@ const Assignment: React.FC = () => {
           </div>
 
           {/* RIGHT — Add panel */}
-          <AddPanel onAdded={fetchAgents} existingIds={agents.map(a => a.bitrix_user_id)} />
+          <AddPanel onAdded={fetchAgentsAndTeams} existingIds={agents.map(a => a.bitrix_user_id)} teams={teams} />
         </div>
       </div>
     </div>

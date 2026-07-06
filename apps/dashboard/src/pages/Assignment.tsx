@@ -9,7 +9,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-const API = () => import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API = () => import.meta.env.VITE_API_URL ?? '';
 
 interface Agent {
   id: string; bitrix_user_id: string; name: string;

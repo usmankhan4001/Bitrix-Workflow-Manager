@@ -2,16 +2,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import Sidebar from './components/layout/Sidebar';
 import DashboardHome from './pages/DashboardHome';
 import TeamManagement from './pages/TeamManagement';
-import WorkflowSettings from './pages/WorkflowSettings';
-import NotificationSettings from './pages/NotificationSettings';
-import ActivityLog from './pages/ActivityLog';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
 
 const DashboardLayout = () => (
-  <div className="flex h-screen overflow-hidden bg-b24-bg">
+  <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--b24-bg)' }}>
     <Sidebar />
-    <div className="flex-1 overflow-hidden flex flex-col">
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <Outlet />
     </div>
   </div>
@@ -26,9 +24,10 @@ function App() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="team" element={<TeamManagement />} />
-          <Route path="settings" element={<WorkflowSettings />} />
-          <Route path="notifications" element={<NotificationSettings />} />
-          <Route path="activity" element={<ActivityLog />} />
+          <Route path="settings" element={<Settings />} />
+          {/* Legacy redirects */}
+          <Route path="notifications" element={<Navigate to="/dashboard/settings" replace />} />
+          <Route path="activity" element={<Navigate to="/dashboard" replace />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>

@@ -445,25 +445,6 @@ const Settings: React.FC = () => {
               tip="Example: if set to 2, and a lead already has 2 open tasks without being resolved, it skips the agent queue and goes to the Escalation Manager directly."
               right={<><input type="number" min={1} max={10} className="b24-input" style={{ width: 72, textAlign: 'center' }} value={settings.MAX_TASKS_BEFORE_ESCALATION || '2'} onChange={e => setSettings(s => ({ ...s, MAX_TASKS_BEFORE_ESCALATION: e.target.value }))} /><span style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginRight: 8 }}>tasks</span><SaveBtn onClick={() => save('MAX_TASKS_BEFORE_ESCALATION', settings.MAX_TASKS_BEFORE_ESCALATION || '2')} saving={saving === 'MAX_TASKS_BEFORE_ESCALATION'} /></>}
             />
-
-            <FormRow
-              label="Excluded Source IDs"
-              desc="Leads from these Bitrix24 sources will be silently ignored — never assigned to anyone."
-              tip="Find Source IDs in Bitrix24 → CRM → Settings → Lead Sources.\nEnter them comma-separated, e.g.: UC_NNO79X, CALL\nUseful for ignoring junk or internal sources."
-              right={
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    className="b24-input"
-                    style={{ width: 180, fontFamily: 'monospace', fontSize: 12 }}
-                    placeholder="e.g. UC_NNO79X, CALL"
-                    value={settings.EXCLUDED_SOURCES_RAW ?? (() => { try { return JSON.parse(settings.EXCLUDED_SOURCES || '[]').join(', '); } catch { return ''; } })()}
-                    onChange={e => setSettings(s => ({ ...s, EXCLUDED_SOURCES_RAW: e.target.value }))}
-                  />
-                  <SaveBtn onClick={() => { const arr = (settings.EXCLUDED_SOURCES_RAW || '').split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean); save('EXCLUDED_SOURCES', JSON.stringify(arr)); }} saving={saving === 'EXCLUDED_SOURCES'} />
-                </div>
-              }
-            />
           </Section>
         </div>
       </div>

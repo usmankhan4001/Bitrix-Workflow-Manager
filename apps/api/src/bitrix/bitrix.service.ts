@@ -4,41 +4,6 @@ import { Injectable, Logger } from '@nestjs/common';
 export class BitrixService {
   private readonly logger = new Logger(BitrixService.name);
 
-  // Exchange auth code for tokens
-  async exchangeAuthCode(code: string, domain: string): Promise<any> {
-    const clientId = process.env.BITRIX_CLIENT_ID;
-    const clientSecret = process.env.BITRIX_CLIENT_SECRET;
-    
-    if (!clientId || !clientSecret) {
-      throw new Error('Bitrix credentials not configured');
-    }
-
-    try {
-      const url = `https://${domain}/oauth/token/?grant_type=authorization_code&client_id=${clientId}&client_secret=${clientSecret}&code=${code}`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error_description || data.error);
-      }
-
-      this.logger.log(`Successfully authenticated via domain: ${domain}`);
-      return data;
-    } catch (error) {
-      const msg = (error as Error).message;
-      this.logger.error(`Error exchanging auth code: ${msg}`);
-      throw error;
-    }
-  }
-
-  // Example method to get user info after auth
-  async getCurrentUser(accessToken: string, domain: string) {
-    const url = `https://${domain}/rest/user.current.json?auth=${accessToken}`;
-    const response = await fetch(url);
-    return await response.json();
-  }
-
   // Resolves the webhook base URL whether the token is a full URL or just the token part
   private resolveWebhookBase(webhookToken: string, portalUrl: string): string {
     // Full URL already: https://pcicrm.bitrix24.com/rest/11/xxxtoken/
@@ -117,19 +82,5 @@ export class BitrixService {
       }
     }
     return map;
-  }
-
-  // Fetch leads from Bitrix24
-  async getLeads(accessToken: string, domain: string) {
-    // Note: crm.lead.list returns a list of leads
-    const url = `https://${domain}/rest/crm.lead.list.json?auth=${accessToken}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error_description || data.error);
-    }
-    
-    return data;
   }
 }

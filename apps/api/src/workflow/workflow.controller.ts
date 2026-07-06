@@ -72,20 +72,6 @@ export class WorkflowController {
 
   // ─── Bitrix24 Users & Departments ─────────────────────────────────────────
 
-  @Get('bitrix-users')
-  async getBitrixUsers(@Query('access_token') accessToken: string, @Query('domain') domain: string) {
-    if (!accessToken || !domain) return { users: [], error: 'access_token and domain are required' };
-    const users = await this.workflowService.fetchBitrixUsers(accessToken, domain);
-    return { users };
-  }
-
-  @Get('bitrix-departments')
-  async getBitrixDepartments(@Query('access_token') accessToken: string, @Query('domain') domain: string) {
-    if (!accessToken || !domain) return { departments: [], error: 'access_token and domain are required' };
-    const departments = await this.workflowService.fetchBitrixDepartments(accessToken, domain);
-    return { departments };
-  }
-
   // ─── Workflow Status (dashboard snapshot) ──────────────────────────────────
 
   @Get('status')
@@ -107,14 +93,10 @@ export class WorkflowController {
       team = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
     }
 
-    const creds = body.access_token && body.domain
-      ? { accessToken: body.access_token, domain: body.domain }
-      : undefined;
-
     return this.workflowService.processLeadAssignment(
       leadId,
       team,
-      creds ?? (this.workflowService as any).getWebhookCreds(),
+      (this.workflowService as any).getWebhookCreds(),
       body.force === true || body.force === 'true',
     );
   }

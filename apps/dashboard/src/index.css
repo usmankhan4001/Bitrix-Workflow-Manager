@@ -1,0 +1,355 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Bitrix24 templates-dashboard — LIGHT theme (default)
+   ───────────────────────────────────────────────────────────────────────────── */
+:root {
+  --b24-bg:              #edeef0;
+  --b24-sidebar:         #ffffff;
+  --b24-card:            #ffffff;
+  --b24-card-hover:      #f5f5f7;
+  --b24-input-bg:        #f5f5f7;
+
+  --b24-divider:         #dfe0e3;
+  --b24-divider-light:   #eaebee;
+
+  --b24-text:            #1a1a1a;
+  --b24-text-muted:      #535c69;
+  --b24-text-faint:      #a8b1bd;
+
+  --b24-primary:         #1587fa;
+  --b24-primary-dim:     rgba(21, 135, 250, 0.10);
+  --b24-primary-ring:    rgba(21, 135, 250, 0.22);
+
+  --b24-nav-active:      rgba(21, 135, 250, 0.10);
+  --b24-nav-icon:        rgba(21, 135, 250, 0.15);
+
+  --b24-green:           #1cae6a;
+  --b24-green-dim:       rgba(28, 174, 106, 0.10);
+  --b24-green-ring:      rgba(28, 174, 106, 0.25);
+  --b24-red:             #f2473d;
+  --b24-red-dim:         rgba(242, 71, 61, 0.10);
+  --b24-red-ring:        rgba(242, 71, 61, 0.25);
+  --b24-orange:          #e09800;
+  --b24-orange-dim:      rgba(224, 152, 0, 0.10);
+  --b24-orange-ring:     rgba(224, 152, 0, 0.25);
+
+  --b24-sidebar-w:       200px;
+  --b24-header-h:        56px;
+  --b24-radius:          10px;
+  --b24-radius-sm:       6px;
+
+  /* Button secondary light */
+  --b24-btn-sec-bg:      #f0f1f3;
+  --b24-btn-sec-hover:   #e4e5e8;
+  --b24-btn-sec-color:   #535c69;
+  --b24-scrollbar:       #d0d3d8;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DARK theme
+   ───────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --b24-bg:              #000000;
+  --b24-sidebar:         #1a1a1a;
+  --b24-card:            #262626;
+  --b24-card-hover:      #2d2d2d;
+  --b24-input-bg:        #1f1f1f;
+
+  --b24-divider:         #323232;
+  --b24-divider-light:   #2a2a2a;
+
+  --b24-text:            #f8f8f8;
+  --b24-text-muted:      #828b95;
+  --b24-text-faint:      #525c69;
+
+  --b24-primary:         #1587fa;
+  --b24-primary-dim:     rgba(21, 135, 250, 0.12);
+  --b24-primary-ring:    rgba(21, 135, 250, 0.25);
+
+  --b24-nav-active:      #1f3048;
+  --b24-nav-icon:        #062040;
+
+  --b24-green:           #1cae6a;
+  --b24-green-dim:       rgba(28, 174, 106, 0.12);
+  --b24-green-ring:      rgba(28, 174, 106, 0.3);
+  --b24-red:             #f2473d;
+  --b24-red-dim:         rgba(242, 71, 61, 0.12);
+  --b24-red-ring:        rgba(242, 71, 61, 0.3);
+  --b24-orange:          #e09800;
+  --b24-orange-dim:      rgba(224, 152, 0, 0.12);
+  --b24-orange-ring:     rgba(224, 152, 0, 0.3);
+
+  --b24-btn-sec-bg:      #2e2e2e;
+  --b24-btn-sec-hover:   #373737;
+  --b24-btn-sec-color:   #828b95;
+  --b24-scrollbar:       #3a3a3a;
+}
+
+/* ── Reset ── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--b24-bg);
+    color: var(--b24-text);
+    font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.2s, color 0.2s;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+  table { border-collapse: collapse; width: 100%; }
+}
+
+/* ── Cards ── */
+.b24-card {
+  background: var(--b24-card);
+  border-radius: var(--b24-radius);
+  border: 1px solid var(--b24-divider);
+  overflow: hidden;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* ── Section panels ── */
+.b24-section-top {
+  background: var(--b24-card);
+  border: 1px solid var(--b24-divider);
+  border-radius: var(--b24-radius) var(--b24-radius) 0 0;
+  border-bottom: 1px solid var(--b24-divider-light);
+  padding: 18px 22px;
+}
+.b24-section-body {
+  background: var(--b24-card);
+  border: 1px solid var(--b24-divider);
+  border-top: none;
+  border-radius: 0 0 var(--b24-radius) var(--b24-radius);
+  overflow: hidden;
+}
+
+/* ── Navbar ── */
+.b24-navbar {
+  height: var(--b24-header-h);
+  background: var(--b24-card);
+  border-bottom: 1px solid var(--b24-divider);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  flex-shrink: 0;
+}
+
+/* ── Two-column layout ── */
+.b24-two-col {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 340px);
+  gap: 16px;
+  padding: 16px 20px;
+  align-items: start;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .b24-two-col { grid-template-columns: 1fr; }
+}
+
+/* ── Buttons ── */
+.b24-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--b24-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s, opacity 0.12s;
+  white-space: nowrap;
+  line-height: 1;
+}
+.b24-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.b24-btn-primary {
+  background: var(--b24-primary);
+  color: #fff;
+  border-color: var(--b24-primary);
+}
+.b24-btn-primary:hover:not(:disabled) { background: #0e70d6; border-color: #0e70d6; }
+
+.b24-btn-secondary {
+  background: var(--b24-btn-sec-bg);
+  color: var(--b24-btn-sec-color);
+  border-color: var(--b24-divider);
+}
+.b24-btn-secondary:hover:not(:disabled) {
+  background: var(--b24-btn-sec-hover);
+  color: var(--b24-text);
+}
+
+.b24-btn-ghost {
+  background: transparent;
+  color: var(--b24-text-muted);
+  border-color: transparent;
+}
+.b24-btn-ghost:hover:not(:disabled) {
+  background: var(--b24-btn-sec-bg);
+  color: var(--b24-text);
+}
+
+/* ── Inputs ── */
+.b24-input {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--b24-input-bg);
+  border: 1px solid var(--b24-divider);
+  border-radius: var(--b24-radius-sm);
+  color: var(--b24-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.b24-input:focus {
+  border-color: var(--b24-primary);
+  box-shadow: 0 0 0 3px var(--b24-primary-dim);
+}
+.b24-input::placeholder { color: var(--b24-text-faint); }
+
+.b24-select {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--b24-input-bg);
+  border: 1px solid var(--b24-divider);
+  border-radius: var(--b24-radius-sm);
+  color: var(--b24-text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+  transition: border-color 0.12s;
+}
+.b24-select:focus {
+  border-color: var(--b24-primary);
+  box-shadow: 0 0 0 3px var(--b24-primary-dim);
+}
+
+/* ── Badges ── */
+.b24-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.b24-badge-success { background: var(--b24-green-dim);   color: var(--b24-green);   border: 1px solid var(--b24-green-ring); }
+.b24-badge-alert   { background: var(--b24-red-dim);     color: var(--b24-red);     border: 1px solid var(--b24-red-ring); }
+.b24-badge-warning { background: var(--b24-orange-dim);  color: var(--b24-orange);  border: 1px solid var(--b24-orange-ring); }
+.b24-badge-neutral { background: rgba(130,139,149,0.10); color: var(--b24-text-muted); border: 1px solid rgba(130,139,149,0.2); }
+.b24-badge-primary { background: var(--b24-primary-dim); color: var(--b24-primary); border: 1px solid var(--b24-primary-ring); }
+
+/* ── Stat icon ── */
+.b24-stat-icon {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Table ── */
+.b24-table { width: 100%; }
+.b24-table thead tr { border-bottom: 1px solid var(--b24-divider); }
+.b24-table thead th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--b24-text-muted);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.b24-table tbody tr {
+  border-bottom: 1px solid var(--b24-divider-light);
+  transition: background 0.1s;
+}
+.b24-table tbody tr:last-child { border-bottom: none; }
+.b24-table tbody tr:hover { background: var(--b24-card-hover); }
+.b24-table tbody td {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--b24-text);
+  vertical-align: middle;
+}
+
+/* ── Form row ── */
+.b24-form-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--b24-divider-light);
+  gap: 16px;
+}
+.b24-form-row:last-child { border-bottom: none; }
+
+/* ── Toggle switch ── */
+.b24-toggle {
+  position: relative;
+  width: 42px; height: 22px;
+  border-radius: 11px;
+  border: none;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.b24-toggle-knob {
+  position: absolute;
+  top: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: left 0.2s;
+}
+
+/* ── Member row (Assignment page) ── */
+.b24-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--b24-divider-light);
+  transition: background 0.1s;
+  background: var(--b24-card);
+}
+.b24-member-row:last-child { border-bottom: none; }
+.b24-member-row:hover { background: var(--b24-card-hover); }
+
+/* ── Sidebar nav hover ── */
+.b24-nav-link:hover { background: var(--b24-card-hover) !important; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b24-scrollbar); border-radius: 3px; }
+
+/* ── Spinner ── */
+@keyframes b24spin { to { transform: rotate(360deg); } }
+.b24-spin { animation: b24spin 0.8s linear infinite; }
+
+/* ── Code ── */
+.b24-code {
+  background: var(--b24-input-bg);
+  border: 1px solid var(--b24-divider);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  color: var(--b24-text-muted);
+}

@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id              String   @id @default(uuid())
+  bitrix_user_id  String   @unique
+  name            String
+  team            String   @default("B2C")
+  department_id   String?
+  department_name String?
+  whatsapp_phone  String?
+  is_active       Boolean  @default(true)
+  sort_order      Int      @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+}
+
+model AssignmentLog {
+  id           String   @id @default(uuid())
+  lead_id      String
+  agent_id     String
+  agent_name   String
+  team         String
+  assigned_at  DateTime @default(now())
+  wa_notified  Boolean  @default(false)
+}
+
+model CompletedQueue {
+  id          String   @id @default(uuid())
+  agent_id    String
+  agent_name  String
+  team        String
+  lead_id     String
+  queued_at   DateTime @default(now())
+}
+
+model WorkflowSetting {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  value      String
+  updated_at DateTime @updatedAt
+}
+
+model LateLead {
+  id           String    @id @default(uuid())
+  lead_id      String    @unique
+  created_at   DateTime  @default(now())
+  processed    Boolean   @default(false)
+  processed_at DateTime?
+}

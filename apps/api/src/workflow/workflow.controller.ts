@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Redirect } from '@nestjs/common';
 import { WorkflowService } from './workflow.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 
@@ -145,6 +145,13 @@ export class WorkflowController {
   }
 
   // ─── WhatsApp ─────────────────────────────────────────────────────────────
+
+  @Get('chat/:phone')
+  @Redirect('https://wa.me', 302)
+  redirectWhatsApp(@Param('phone') phone: string) {
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    return { url: `https://wa.me/${cleanPhone}` };
+  }
 
   @Post('whatsapp/test')
   testWhatsapp(@Body() body: { phone: string }) { return this.whatsapp.testConnection(body.phone); }

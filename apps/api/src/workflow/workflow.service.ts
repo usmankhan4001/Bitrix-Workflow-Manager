@@ -25,6 +25,7 @@ interface LeadDetails {
   source: string;
   sourceId: string;
   title: string;
+  phone?: string;
   assignedById?: string;
   modifyById?: string;
 }
@@ -260,11 +261,17 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       const sourceLabels = await this.getSourceLabels(creds);
       const sourceLabel = sourceLabels[sourceId] || lead.SOURCE_DESCRIPTION || sourceId || 'CRM';
 
+      let phone = '';
+      if (lead.PHONE && Array.isArray(lead.PHONE) && lead.PHONE.length > 0) {
+        phone = lead.PHONE[0]?.VALUE || '';
+      }
+
       return {
         name: displayName,
         source: sourceLabel,
         sourceId,
         title: lead.TITLE || displayName,
+        phone,
         assignedById: lead.ASSIGNED_BY_ID,
         modifyById: lead.MODIFY_BY_ID,
       };
@@ -449,6 +456,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         lead.source,
         settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
         settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+        lead.phone,
       );
       if (waNotified) {
         await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
@@ -627,6 +635,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
               lead.source,
               settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
               settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+              lead.phone,
             );
           }
         }
@@ -643,6 +652,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
           lead.source,
           settings.ONCLOUD_OVERDUE_TEMPLATE || 'lead_overdue',
           settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+          lead.phone,
         );
       }
 

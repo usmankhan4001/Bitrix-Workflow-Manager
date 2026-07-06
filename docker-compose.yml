@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: bitrixflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bitrixflow_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bitrixflow_password}
+      POSTGRES_DB: ${POSTGRES_DB:-bitrixflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bitrixflow_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bitrixflow
+
+  # ─── NestJS API ────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: bitrixflow-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bitrixflow_user}:${POSTGRES_PASSWORD:-bitrixflow_password}@postgres:5432/${POSTGRES_DB:-bitrixflow}?schema=public
+      BITRIX_PORTAL_URL: ${BITRIX_PORTAL_URL}
+      BITRIX_CLIENT_ID: ${BITRIX_CLIENT_ID}
+      BITRIX_CLIENT_SECRET: ${BITRIX_CLIENT_SECRET}
+      BITRIX_REDIRECT_URI: ${BITRIX_REDIRECT_URI}
+      FRONTEND_URL: ${FRONTEND_URL}
+      ONCLOUD_API_TOKEN: ${ONCLOUD_API_TOKEN}
+    networks:
+      - bitrixflow
+
+  # ─── React Dashboard (Nginx) ───────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile
+    container_name: bitrixflow-dashboard
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    networks:
+      - bitrixflow
+
+networks:
+  bitrixflow:
+    driver: bridge
+
+volumes:
+  postgres_data:

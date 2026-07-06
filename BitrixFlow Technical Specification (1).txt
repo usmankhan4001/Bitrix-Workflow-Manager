@@ -1,0 +1,453 @@
+BITRIXFLOW
+Complete Sales Operations & Lead Distribution Platform
+Master Technical Specification (Part 3)
+Complete UI/UX, Screens, User Flows & Operational Experience
+Version: 1.0 Status: Architecture Lock Document
+
+27. UI/UX PHILOSOPHY
+The system is designed for operational speed.
+Users should be able to:
+Identify problems in under 10 secondsTake action in under 3 clicksUnderstand system status immediately
+The dashboard should feel like:
+CRM Operations Center
+Not:
+Software Configuration Tool
+
+DESIGN PRINCIPLES
+Principle 1
+Information First
+Show:
+ProblemsExceptionsEscalations
+Before:
+ChartsStatistics
+
+Principle 2
+Minimal Navigation
+Most tasks should require:
+1–3 clicks
+
+Principle 3
+Manager Focused
+Primary users:
+Workflow ManagerSales ManagerSales Director
+
+MAIN NAVIGATION
+Left Sidebar
+DashboardOperations ├── Live Queue ├── Assignments ├── Escalations ├── ActivitiesManagement ├── Agents ├── Teams ├── Source Routing ├── Rules BuilderAnalytics ├── Reports ├── Attribution ├── SLA PerformanceAdministration ├── Bitrix Sync ├── Notifications ├── Settings ├── Audit Logs
+
+DASHBOARD HOME
+URL
+/dashboard
+Purpose:
+Instant visibility.
+
+TOP KPI ROW
+Cards:
+Leads Today
+146
+
+Assigned
+142
+
+Pending
+4
+
+Escalated
+11
+
+SLA Compliance
+93%
+
+Active Agents
+17
+
+Team Load
+Moderate
+
+LIVE OPERATIONS PANEL
+Purpose:
+Show active issues.
+
+Sections:
+Unassigned Leads
+LeadSourceAgeAction
+
+SLA Breaches
+LeadAgentMinutes OverdueEscalation Level
+
+Failed Notifications
+WhatsApp FailedBitrix FailedEmail Failed
+
+Recent Assignments
+Live feed.
+09:31Lead #1245Assigned to Ahmed09:33Lead #1246Assigned to Bilal
+
+LIVE QUEUE SCREEN
+URL
+/operations/live-queue
+Purpose:
+See all incoming leads in real time.
+
+Columns
+Lead IDLead NamePhoneSourceCampaignAssigned AgentStatusCreated AtAge
+
+Filters
+TodaySourceAgentStatusCampaign
+
+Actions
+View LeadOpen BitrixManual AssignEscalate
+
+ASSIGNMENTS SCREEN
+URL
+/operations/assignments
+Purpose:
+Complete assignment history.
+
+Columns
+Assignment IDLeadSourceTeamAgentMethodReasonStatusAssigned At
+
+Status Types
+SuccessFallbackFailedEscalatedManual
+
+Assignment Detail Drawer
+Shows:
+Lead DetailsAgent DetailsAssignment RuleDecision TreeTimeline
+
+Manager can answer:
+Why was this lead assigned?
+Instantly.
+
+ASSIGNMENT DETAIL SCREEN
+Purpose:
+Full assignment explanation.
+
+Section 1
+Lead Information
+Lead IDNamePhoneSourceCampaign
+
+Section 2
+Assignment Logic
+Example:
+Source Route:Meta Ads → TelesalesEligible Agents:AhmedBilalUsmanSelected:BilalReason:Lowest LoadOldest Assignment
+
+Section 3
+Assignment Timeline
+Lead CreatedAssignment RequestedAssignment CompletedNotification Sent
+
+ESCALATIONS SCREEN
+URL
+/operations/escalations
+Purpose:
+Track overdue follow-ups.
+
+Escalation Queue
+Columns
+LeadAgentSourceMinutes OverdueEscalation LevelManagerStatus
+
+Color Coding
+Green
+Level 0
+Yellow
+Level 1
+Orange
+Level 2
+Red
+Level 3+
+
+Actions
+Open LeadNotify AgentNotify ManagerResolve EscalationTransfer Lead
+
+ACTIVITIES SCREEN
+URL
+/operations/activities
+Purpose:
+Monitor workflow-created activities.
+
+Columns
+ActivityLeadAgentDeadlineCompletedStatus
+
+Filters
+PendingCompletedOverdueEscalated
+
+AGENTS SCREEN
+URL
+/management/agents
+Purpose:
+Manage all agents.
+
+Columns
+NameBitrix UserTeamStatusAvailabilityLeads TodayOpen LeadsLast AssignedLast Activity
+
+Status
+ActiveInactive
+
+Availability
+AvailableBusyBreakLeaveOffline
+
+Quick Actions
+ActivateDeactivateTransfer TeamReset Counters
+
+AGENT PROFILE SCREEN
+Purpose:
+Everything about agent.
+
+Tab 1
+Overview
+Current StatusCurrent TeamCurrent LoadPerformance
+
+Tab 2
+Assignments
+All Assigned Leads
+
+Tab 3
+Performance
+Response TimeConversionsMeetingsSales
+
+Tab 4
+Audit
+Status ChangesTeam TransfersManual Overrides
+
+CREATE AGENT MODAL
+Fields
+Bitrix UserNameEmailPhoneWhatsAppTeamWeightPriorityStatusAvailability
+
+TEAMS SCREEN
+URL
+/management/teams
+Purpose:
+Manage teams.
+
+Columns
+TeamManagerAgentsAssignment MethodActive
+
+Actions
+EditDeactivateView Agents
+
+TEAM DETAIL SCREEN
+Sections
+
+Overview
+ManagerFallback ManagerAssignment Method
+
+Agents
+Agent List
+
+Performance
+LeadsConversionsSLA
+
+SOURCE ROUTING SCREEN
+URL
+/management/source-routing
+Purpose:
+Control source assignment.
+
+Columns
+SourceSource IDRoute TeamPriorityStatus
+
+Actions
+EditDisableDelete
+
+CREATE ROUTE MODAL
+Fields
+Source NameSource KeyTeamPriorityExcludedDefault Route
+
+RULE BUILDER SCREEN
+URL
+/management/rules
+Purpose:
+Create logic without code.
+
+Builder Layout
+IF[Source]equals[Meta]AND[Project]equals[Box Park]THENAssign Team[Telesales]
+
+Rule Types
+AssignmentEscalationNotificationOwnership
+
+REPORTS HOME
+URL
+/analytics/reports
+
+Cards
+Agent ReportsTeam ReportsSource ReportsCampaign ReportsSLA Reports
+
+AGENT REPORT SCREEN
+Metrics
+Leads AssignedLeads ContactedResponse TimeMeetingsSite VisitsSalesConversion Rate
+
+Charts
+Daily TrendWeekly TrendMonthly Trend
+
+TEAM REPORT SCREEN
+Metrics
+Lead VolumeAssignmentsMeetingsDealsRevenue
+
+SOURCE REPORT SCREEN
+Metrics
+MetaGoogleWhatsAppWebsiteReferral
+
+Visualization
+Lead VolumeQualificationSite VisitsSales
+
+CAMPAIGN ATTRIBUTION SCREEN
+URL
+/analytics/attribution
+Purpose:
+Marketing visibility.
+
+Columns
+CampaignAd SetAdLeadsQualifiedVisitsSales
+
+Drill Down
+Campaign
+↓
+Ad Set
+↓
+Ad
+↓
+Lead List
+
+SLA PERFORMANCE SCREEN
+Purpose:
+Measure discipline.
+
+Metrics
+On TimeLateMissedEscalated
+
+By
+AgentTeamSource
+
+BITRIX SYNC SCREEN
+URL
+/admin/bitrix-sync
+Purpose:
+Monitor synchronization.
+
+Sections
+Users
+Last SyncCountStatus
+
+Sources
+Last SyncCount
+
+Stages
+Last SyncCount
+
+Pipelines
+Last SyncCount
+
+Actions
+Sync Now
+
+NOTIFICATION CENTER
+URL
+/admin/notifications
+Purpose:
+Manage channels.
+
+Tabs
+WhatsAppBitrixEmail
+
+WHATSAPP TEMPLATES SCREEN
+Templates
+New LeadEscalationReminderManager Alert
+
+Editor
+Variables
+{{lead_name}}{{agent_name}}{{source}}{{lead_url}}
+
+SETTINGS SCREEN
+URL
+/administration/settings
+
+Section 1
+General
+Organization NameTimezoneDate Format
+
+Section 2
+Assignment
+Default Assignment MethodOwnership WindowFallback Rules
+
+Section 3
+SLA
+Default SLAEscalation Levels
+
+Section 4
+Bitrix
+Portal URLClient IDClient Secret
+
+Section 5
+WhatsApp
+ProviderAPI KeyWebhook URL
+
+AUDIT LOG SCREEN
+URL
+/administration/audit
+Purpose:
+Track every action.
+
+Columns
+TimeUserActionEntityBeforeAfter
+
+Examples
+Agent DeactivatedRoute ChangedWorkflow Manager UpdatedRule Modified
+
+SEARCH EXPERIENCE
+Global Search
+Top Navigation.
+Search:
+LeadAgentAssignmentEscalationCampaign
+
+Results
+Grouped.
+LeadsAssignmentsAgentsReports
+
+MOBILE EXPERIENCE
+Managers should be able to:
+View DashboardApprove EscalationsActivate AgentsMonitor SLA
+Phone-first design is not required.
+Responsive dashboard only.
+
+ROLE-BASED UI
+
+Super Admin
+Sees:
+Everything
+
+Sales Director
+Sees:
+ReportsEscalationsTeamsAssignments
+
+Workflow Manager
+Sees:
+OperationsAgentsRoutingRules
+
+Team Manager
+Sees:
+Own TeamOwn ReportsOwn Escalations
+
+Viewer
+Sees:
+Read Only
+
+USER JOURNEYS
+
+Journey 1
+New Lead Assignment
+Lead Created↓Assignment Engine↓Agent Selected↓CRM Updated↓Activity Created↓WhatsApp Sent↓Log Saved
+
+Journey 2
+Missed Follow-Up
+Deadline Passed↓Escalation Worker↓Agent Reminder↓Manager Alert↓Escalation Log
+
+Journey 3
+Manager Investigation
+Open Assignment↓See Decision Tree↓See Rule↓See Agent Load↓Understand Why
+
+Journey 4
+Agent Goes On Leave
+Manager Opens Agent↓Availability = Leave↓Agent Removed From Queue↓Assignments Continue
+
+FINAL UI OBJECTIVE
+A sales manager should be able to answer these questions within 10 seconds:
+How many leads came today?Who received them?Who missed follow-ups?Which source is performing?Why was a lead assigned?Which agent is overloaded?Which campaign is generating revenue?
+If the UI cannot answer those questions instantly, the design has failed.

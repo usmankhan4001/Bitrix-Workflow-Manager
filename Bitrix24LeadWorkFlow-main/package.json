@@ -1,0 +1,23 @@
+{
+  "name": "bitrix24leadworkflow",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@bitrix24/b24jssdk": "^0.5.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.2",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^9.0.1",
+    "node-cron": "^4.2.1"
+  }
+}

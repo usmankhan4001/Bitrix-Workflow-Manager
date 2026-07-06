@@ -1,0 +1,1376 @@
+{
+  "info": {
+    "_postman_id": "a84761e0-a5cd-4380-8254-14cf7d90348f",
+    "name": "On Cloud API Docs",
+    "description": "Let's Expand your business using WhatsApp Business By On Cloud API\n\n<img src=\"https://oncloudapi.com/_next/static/media/design_icon.2000188b.png\">\n\nOptimize your communication and increase sales through the WhatsApp Business API platform, streamlining marketing, sales, service, and support processes.\n\n<img src=\"https://oncloudapi.com/_next/static/media/metaLogo.f1690571.png\">\n\nMeta Verified Tech Provider\n\n## UAN 0331-1110559",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "51385868",
+    "_collection_link": "https://go.postman.co/collection/51385868-a84761e0-a5cd-4380-8254-14cf7d90348f?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "New Request",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "email",
+                  "value": "owner@examplpe.com",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "oksds",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/login",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "SendTemplateMessage",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"template_name\":\"{{template_name}}\",\n    \"template_language\":\"{{template_language}}\",\n    \"components\":[\n      {\n        \"type\": \"body\",\n        \"parameters\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Daniel\"\n          },\n           {\n            \"type\": \"text\",\n            \"text\": \"14\"\n          }\n        ]\n      }\n    ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendtemplatemessage",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendtemplatemessage"
+              ]
+            },
+            "description": "This endpoint allows you to send a template message to WhatsApp phone number\n\n### Request Body\n\n- token (text, required): The token for authentication.\n    \n- phone (text, required): The phone number of the recipient.s\n    \n- template_name (text, required): The name of the template to be used.\n    \n- template_language (text, required): The language of the template to be used.\n    \n- components (array, required): An array of message components based on the Facebook WhatsApp API [https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-message-templates](https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-message-templates)"
+          },
+          "response": []
+        },
+        {
+          "name": "GetTemplates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getTemplates?token={{token}}",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getTemplates"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                }
+              ]
+            },
+            "description": "This endpoint makes an HTTP GET request to retrieve templates from the API. It requires a token parameter in the query string for authentication.\n\n### Request\n\n- Method: GET\n- Endpoint: {{api_endpoint}}api/wpbox/getTemplates\n- Query Parameters:\n    - token (string, required): The authentication token.\n\n### Response\n\n- Status: 200 OK\n- Body:\n    \n    ``` json\n          {\n            \"status\": \"\",\n            \"templates\": [\n              {\n                \"id\": 0,\n                \"name\": \"\",\n                \"status\": \"\",\n                \"category\": \"\",\n                \"language\": \"\",\n                \"components\": \"\",\n                \"company_id\": 0,\n                \"created_at\": \"\",\n                \"updated_at\": \"\"\n              }\n            ]\n          }\n    \n     ```\n    \n\nThe response contains a status field and an array of templates, each with an ID, name, status, category, language, components, company ID, creation timestamp, and last update timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "PDF Template Sending API",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"token\",\n  \"phone\": \"number\",\n  \"template_name\": \"pdf_message\",\n  \"template_language\": \"en\",\n  \"components\": [\n    {\n      \"type\": \"header\",\n      \"parameters\": [\n        {\n          \"type\": \"document\",\n          \"document\": {\n            \"link\": \"https://www.orimi.com/pdf-test.pdf\",\n            \"filename\": \"testingash.pdf\"\n          }\n        }\n      ]\n    },\n    {\n      \"type\": \"body\",\n      \"parameters\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Asher\"\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"On Cloud APIs\"\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"PKR 2,500\"\n        }\n      ]\n    }\n  ]\n}\n",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendtemplatemessage",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendtemplatemessage"
+              ]
+            },
+            "description": "👉 `https://apps.oncloudapi.com/api/wpbox/sendtemplatemessage`\n\nBelow is your **final ready-to-use documentation** for your WhatsApp Cloud API (with PDF sending support) — formatted in Markdown style for GitHub, API docs, or Postman collection use.\n\n---\n\n# 📄 WhatsApp Cloud API — Send Template Message with PDF Document\n\n## 🌐 Endpoint\n\n```\nPOST https://apps.oncloudapi.com/api/wpbox/sendtemplatemessage\n\n ```\n\n---\n\n## 🧠 Overview\n\nThis API sends **WhatsApp template messages** with an attached **PDF file (Document Header)** using an approved template in your WhatsApp Business account.\n\nYou can use this to send invoices, receipts, or reports automatically.\n\n---\n\n## 🧩 Request Example\n\n```\n{\n  \"token\": \"token\",\n  \"phone\": \"923354334982\",\n  \"template_name\": \"pdf_message\",\n  \"template_language\": \"en\",\n  \"components\": [\n    {\n      \"type\": \"header\",\n      \"parameters\": [\n        {\n          \"type\": \"document\",\n          \"document\": {\n            \"link\": \"https://yourdomain.com/invoice.pdf\",\n            \"filename\": \"Invoice_Asher.pdf\"\n          }\n        }\n      ]\n    },\n    {\n      \"type\": \"body\",\n      \"parameters\": [\n        { \"type\": \"text\", \"text\": \"Asher\" },\n        { \"type\": \"text\", \"text\": \"On Cloud APIs\" },\n        { \"type\": \"text\", \"text\": \"PKR 2,500\" }\n      ]\n    }\n  ]\n}\n\n ```\n\n---\n\n## 🧾 Parameter Details\n\n| Field | Type | Description | Required |\n| --- | --- | --- | --- |\n| `token` | string | Your API authentication token. | ✅ |\n| `phone` | string | WhatsApp number (without `+`, include country code). Example: `923001234567` | ✅ |\n| `template_name` | string | Name of the approved WhatsApp message template. | ✅ |\n| `template_language` | string | Template language code (e.g., `en`, `en_US`). | ✅ |\n| `components` | array | Template components (header, body, buttons, etc.). | ✅ |\n\n---\n\n## 🧱 Component Structure\n\n### 1️⃣ Header (Document)\n\n```\n{\n  \"type\": \"header\",\n  \"parameters\": [\n    {\n      \"type\": \"document\",\n      \"document\": {\n        \"link\": \"https://yourdomain.com/invoice.pdf\",\n        \"filename\": \"Invoice_Asher.pdf\"\n      }\n    }\n  ]\n}\n\n ```\n\n- **link** → Direct public URL of your PDF file (must be accessible without login).\n    \n- **filename** → Optional, defines how the file will be displayed to the user.\n    \n- Ensure your **template has a “Document” header type** in the WhatsApp Business Manager.\n    \n\n---\n\n### 2️⃣ Body (Text Parameters)\n\n```\n{\n  \"type\": \"body\",\n  \"parameters\": [\n    { \"type\": \"text\", \"text\": \"Asher\" },\n    { \"type\": \"text\", \"text\": \"On Cloud APIs\" },\n    { \"type\": \"text\", \"text\": \"PKR 2,500\" }\n  ]\n}\n\n ```\n\nEach parameter corresponds to a placeholder in your WhatsApp template, e.g. `{{1}}`, `{{2}}`, `{{3}}`.\n\n---\n\n## 📋 WhatsApp Template Setup Example\n\n**Template Name:** `pdf_message`  \n**Language:** `English (en)`  \n**Template Structure:**\n\n```\nHeader: [Document]\nBody: Hello {{1}}, your payment for {{2}} of {{3}} has been received.\n\n ```\n\n---\n\n## ⚙️ Example — PHP cURL Request\n\n```\n$url = \"https://apps.oncloudapi.com/api/wpbox/sendtemplatemessage\";\n$data = [\n  \"token\" => \"token\",\n  \"phone\" => \"923354334982\",\n  \"template_name\" => \"pdf_message\",\n  \"template_language\" => \"en\",\n  \"components\" => [\n    [\n      \"type\" => \"header\",\n      \"parameters\" => [\n        [\n          \"type\" => \"document\",\n          \"document\" => [\n            \"link\" => \"https://yourdomain.com/invoice.pdf\",\n            \"filename\" => \"Invoice_Asher.pdf\"\n          ]\n        ]\n      ]\n    ],\n    [\n      \"type\" => \"body\",\n      \"parameters\" => [\n        [\"type\" => \"text\", \"text\" => \"Asher\"],\n        [\"type\" => \"text\", \"text\" => \"On Cloud APIs\"],\n        [\"type\" => \"text\", \"text\" => \"PKR 2,500\"]\n      ]\n    ]\n  ]\n];\n$ch = curl_init($url);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\ncurl_setopt($ch, CURLOPT_POST, true);\ncurl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);\ncurl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));\n$response = curl_exec($ch);\ncurl_close($ch);\necho $response;\n?>\n\n ```\n\n---\n\n## ✅ Successful Response Example\n\n```\n{\n  \"success\": true,\n  \"message_id\": \"wamid.HBgLMjMyMzU0MzM0OTgyFQIAEhgUMzg5NzQ5NkEyQjRBMDlFMzgzMUEA\",\n  \"status\": \"sent\",\n  \"to\": \"923354334982\"\n}\n\n ```\n\n---\n\n## ⚠️ Error Codes & Troubleshooting\n\n| Error Message | Description | Solution |\n| --- | --- | --- |\n| `Header parameter missing` | Template header not configured for document | Edit your template in Meta → add Document header |\n| `Invalid token` | API token expired or invalid | Regenerate your token from OnCloud API dashboard |\n| `Invalid URL` | PDF link inaccessible or private | Use a direct public link (e.g., from your hosting or CDN) |\n| `Unsupported Media Type` | File type is not PDF | Ensure you upload `.pdf` format only |\n\n---\n\n## 💡 Notes\n\n- The **maximum file size** for PDFs is **100 MB**.\n    \n- You can reuse the same template for different invoices by changing the body text and document link dynamically.\n    \n- Make sure your WhatsApp Business Account is approved to send **media templates**."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "GetGroups",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{https://apps.oncloudapi.com/api/wpbox/getGroups?token={{token}}&showContacts=no",
+              "protocol": "{{https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getGroups"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "showContacts",
+                  "value": "no"
+                }
+              ]
+            },
+            "description": "This endpoint makes an HTTP GET request to retrieve groups from the On Cloud API. It requires a token parameter in the query string. The parameter showContacts can also be included in the query string with a value of \"no\". The request does not contain a request body.\n\n### Response\n\nThe response to the request has a status code of 200 and returns a JSON object. The object includes a status field and an array of groups, where each group has an id, name, company_id, deleted_at, created_at, and updated_at fields."
+          },
+          "response": []
+        },
+        {
+          "name": "GetContacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getContacts?token={{token}}",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getContacts"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                }
+              ]
+            },
+            "description": "# Get Contacts\n\nThis endpoint retrieves the list of contacts.\n\n## Request\n\n### Endpoint\n\n`GET` {{api_endpoint}}api/wpbox/getContacts\n\n### Query Parameters\n\n- `token` (string, required): The authentication token.\n    \n\n## Response\n\n- `status` (string): The status of the response.\n    \n- `contacts` (array): An array of contact objects with the following properties:\n    - `id` (integer): The unique identifier of the contact.\n        \n    - `name` (string): The name of the contact.\n        \n    - `phone` (string): The phone number of the contact.\n        \n    - `avatar` (string): The avatar URL of the contact.\n        \n    - `country_id` (integer): The ID of the country associated with the contact.\n        \n    - `company_id` (integer): The ID of the company associated with the contact.\n        \n    - `deleted_at` (string): The date and time when the contact was deleted, if applicable.\n        \n    - `created_at` (string): The date and time when the contact was created.\n        \n    - `updated_at` (string): The date and time when the contact was last updated.\n        \n    - `last_reply_at` (string): The date and time of the last reply from the contact.\n        \n    - `last_client_reply_at` (string): The date and time of the last reply from the client.\n        \n    - `last_support_reply_at` (string): The date and time of the last reply from the support team.\n        \n    - `last_message` (string): The last message sent by the contact.\n        \n    - `is_last_message_by_contact` (integer): Indicates if the last message was sent by the contact (1) or not (0).\n        \n    - `has_chat` (integer): Indicates if the contact has an active chat (1) or not (0).\n        \n    - `resolved_chat` (integer): Indicates if the chat with the contact is resolved (1) or not (0).\n        \n    - `user_id` (integer): The ID of the user associated with the contact, if applicable.\n        \n    - `enabled_ai_bot` (integer): Indicates if the AI bot is enabled for the contact (1) or not (0).\n        \n\nExample:\n\n``` json\n{\n    \"status\": \"\",\n    \"contacts\": [\n        {\n            \"id\": 0,\n            \"name\": \"\",\n            \"phone\": \"\",\n            \"avatar\": \"\",\n            \"country_id\": 0,\n            \"company_id\": 0,\n            \"deleted_at\": null,\n            \"created_at\": \"\",\n            \"updated_at\": \"\",\n            \"last_reply_at\": \"\",\n            \"last_client_reply_at\": null,\n            \"last_support_reply_at\": \"\",\n            \"last_message\": \"\",\n            \"is_last_message_by_contact\": 0,\n            \"has_chat\": 0,\n            \"resolved_chat\": 0,\n            \"user_id\": null,\n            \"enabled_ai_bot\": 0\n        }\n    ]\n}\n\n ```"
+          },
+          "response": []
+        },
+        {
+          "name": "GetContact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getSingleContact?token={{token}}&phone={{phone}}&contact_id",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getSingleContact"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "phone",
+                  "value": "{{phone}}"
+                },
+                {
+                  "key": "contact_id",
+                  "value": null
+                }
+              ]
+            },
+            "description": "# Get Contact\n\nThis endpoint retrieves data for single contact\n\n## Request\n\n### Endpoint\n\n`GET` {{api_endpoint}}api/wpbox/getSingleContact\n\n### Query Parameters\n\n- `token` (string, required): The authentication token.\n    \n- phone ( string, optional if contact_id is there )\n    \n- contact_d ( string, optional if phone_id is there )\n    \n\n## Response\n\n- `status` (string): The status of the response.\n    \n- `contact` (array): Contact objects with"
+          },
+          "response": []
+        },
+        {
+          "name": "MakeContact",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"name\":\"John Doe\",\n    \"groups\":\"Europe,Asia\",\n    \"custom\":{\n        \"email\":\"admin@example.com\",\n        \"location\":\"USA\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/makeContact",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "makeContact"
+              ]
+            },
+            "description": "### Make Contact\n\nThis endpoint allows you to make contact with a user.\n\n- The request should be sent to `{{api_endpoint}}api/wpbox/makeContact` using the HTTP POST method.\n    \n\n#### Request Body\n\nThe request body should be in the raw format and include the following parameters:\n\n- `token` (string): The token for authentication.\n    \n- `phone` (string): The phone number of the contact.\n    \n- `name` (string): The name of the contact. _Optional_\n    \n- `groups` (string): Comma separated list of groups. _Optional_\n    \n- `custom` (object): The custom fields of the contact. _Optional_\n    \n\n#### Response\n\n- Status: 200 OK\n    \n- `status` (string): The status of the contact request.\n    \n- `contact` (object): Details of the contact including id, name, phone, avatar, country_id, company_id, deleted_at, created_at, updated_at, last_reply_at, last_client_reply_at, last_support_reply_at, last_message, is_last_message_by_contact, has_chat, resolved_chat, user_id, and enabled_ai_bot."
+          },
+          "response": [
+            {
+              "name": "Invalid Token",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\":\"{{token}}s\",\n    \"phone\":\"{{phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{api_endpoint}}api/wpbox/makeContact",
+                  "host": [
+                    "{{api_endpoint}}api"
+                  ],
+                  "path": [
+                    "wpbox",
+                    "makeContact"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "localhost"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:04:36 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:04:36 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.2.3"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "XSRF-TOKEN=eyJpdiI6ImhLMk5zU3lidFgvN2FaYzYxeFh1MWc9PSIsInZhbHVlIjoiVEpVeXhQV0FjVG5ERVl4VGtWMS9iYTNuQXZOK09rSnF3L09XbnpESVpDUDdjU1Z2SDMwUjdZTHpSUUs1bVU0SWZjOU1wNGxPMEJ2RHJyalZheW9MTGcwMFpBNXZnWnpIVWszMm9lMHo3eUVmaU1ZZUNuWnhGdUpBZS9FVFlGa0kiLCJtYWMiOiI4YjI2NjkxMDNlNGUzN2U2MDg5NzdmYWI0MGMxZTRmMjFiMDYwZWIzODYyZTI0YTY2MzZkMzkwZjkwNzRhYzE0IiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:04:36 GMT; Max-Age=7200; path=/; samesite=lax"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "site_session=eyJpdiI6Ii8zZ0liYjZSMnUyejBlUThRT0Noa0E9PSIsInZhbHVlIjoiNW9CRXZvczg3bXpsUGVqTmNJdmJXcXNYMDlXcjY2UENneUNzVjF5NzhIbXd3eHNwdXhyZ1VIdC9XYjlGV1BTWC9sWEI0WGpXQ04yZzZQOXJUdEFhOWgwakFRUW41MUZoVEJvKzV1UFlzTXlVRFFobFVXcWkyMDlYNWdIRkZqK0IiLCJtYWMiOiJjZmM0YmY0MDdlOTY2ZGMyOThjZWFjNGQwMzI3M2U4ZDcwYTdiODAwZTg0OTY3Zjg3NDgzMjEzMzQyNmIyNTI3IiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:04:36 GMT; Max-Age=7200; path=/; httponly; samesite=lax"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid token\"\n}"
+            },
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"name\":\"John Doe\",\n    \"groups\":\"Europe,Asia\",\n    \"custom\":{\n        \"email\":\"admin@example.com\",\n        \"location\":\"USA\"\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{api_endpoint}}api/wpbox/makeContact",
+                  "host": [
+                    "{{api_endpoint}}api"
+                  ],
+                  "path": [
+                    "wpbox",
+                    "makeContact"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Server",
+                  "value": "nginx/1.25.4"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Transfer-Encoding",
+                  "value": "chunked"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Accept-Encoding"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.2.16"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Date",
+                  "value": "Fri, 04 Oct 2024 14:34:36 GMT"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "XSRF-TOKEN=eyJpdiI6IjFvK0N4N1VlNnZUQWVWRXRTd3dXeHc9PSIsInZhbHVlIjoiYzRQWWNpaDJhR1VNTC9URmtiV0RDZUtRczFpbmhMUEFwUVZERzBzLzdHaXpOZDM4R3RBQ0xKMTZtdG5tOHQ1dW5QSCtkeEtQOUFzR1ozdElzWExZNGl2UVFxU0VDakloRG5za1hWemxramZ2c29YREZGc2dRWWlpaEVEcURKYUUiLCJtYWMiOiI4N2M4MDBhNDE0NjU1N2Q3YWQxNzE3NDI2NzhmNDhmMDhmMWJlMDIyNDA3NDFmOTcyMzVjNWEyMTFiYTUyNjAyIiwidGFnIjoiIn0%3D; expires=Fri, 04 Oct 2024 16:34:36 GMT; Max-Age=7200; path=/; secure; samesite=lax"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "wpbox_session=eyJpdiI6IjgzVi8yR2MwdzNJSlYwK3JScC9oR2c9PSIsInZhbHVlIjoiendLVVkybVk3bTJZenVjYVpTUnVabXFqVDNpRmpQUFArL3paekpLNjBQUVIzZjA5eEU5dGpoL1hUTlU0UW1iRURYdHZzbE1SMW4xb3VZL0d4K05raTBkaUZwTlR5Y0J0WXJLNHhVNVVOZWpVZ2I4YWNqWlBhRmgwL2JGVC9pa2UiLCJtYWMiOiIwNjJjNDI1Mzk2ZWQ0YTE1NWUzMjA4YzQ4M2JjMmEzMWIyYTBiMDljYjk5ZWNjZGFhNmI1ZTQ3ZjgzMzU3ZDBjIiwidGFnIjoiIn0%3D; expires=Fri, 04 Oct 2024 16:34:36 GMT; Max-Age=7200; path=/; httponly; samesite=lax"
+                },
+                {
+                  "key": "Content-Encoding",
+                  "value": "gzip"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"status\": \"success\",\n    \"contact\": {\n        \"id\": 4,\n        \"name\": \"John Doe\",\n        \"phone\": \"+38671246011\",\n        \"avatar\": null,\n        \"country_id\": 196,\n        \"company_id\": 1,\n        \"deleted_at\": null,\n        \"created_at\": \"2024-10-04T14:30:36.000000Z\",\n        \"updated_at\": \"2024-10-04T14:30:36.000000Z\",\n        \"last_reply_at\": null,\n        \"last_client_reply_at\": null,\n        \"last_support_reply_at\": null,\n        \"last_message\": \"\",\n        \"is_last_message_by_contact\": 0,\n        \"has_chat\": 0,\n        \"resolved_chat\": 0,\n        \"user_id\": null,\n        \"enabled_ai_bot\": 1,\n        \"subscribed\": 1,\n        \"email\": null,\n        \"language\": \"none\",\n        \"groups\": [\n            {\n                \"id\": 4,\n                \"name\": \"Europe\",\n                \"company_id\": 1,\n                \"deleted_at\": null,\n                \"created_at\": \"2024-10-04T14:24:54.000000Z\",\n                \"updated_at\": \"2024-10-04T14:24:54.000000Z\",\n                \"pivot\": {\n                    \"contact_id\": 4,\n                    \"group_id\": 4\n                }\n            },\n            {\n                \"id\": 5,\n                \"name\": \"Asia\",\n                \"company_id\": 1,\n                \"deleted_at\": null,\n                \"created_at\": \"2024-10-04T14:24:54.000000Z\",\n                \"updated_at\": \"2024-10-04T14:24:54.000000Z\",\n                \"pivot\": {\n                    \"contact_id\": 4,\n                    \"group_id\": 5\n                }\n            }\n        ],\n        \"fields\": [\n            {\n                \"id\": 3,\n                \"name\": \"email\",\n                \"type\": \"email\",\n                \"company_id\": 1,\n                \"deleted_at\": null,\n                \"created_at\": \"2024-10-04T14:24:52.000000Z\",\n                \"updated_at\": \"2024-10-04T14:24:52.000000Z\",\n                \"pivot\": {\n                    \"contact_id\": 4,\n                    \"custom_contacts_field_id\": 3,\n                    \"value\": \"admin@example.com\"\n                }\n            },\n            {\n                \"id\": 4,\n                \"name\": \"location\",\n                \"type\": \"text\",\n                \"company_id\": 1,\n                \"deleted_at\": null,\n                \"created_at\": \"2024-10-04T14:30:36.000000Z\",\n                \"updated_at\": \"2024-10-04T14:30:36.000000Z\",\n                \"pivot\": {\n                    \"contact_id\": 4,\n                    \"custom_contacts_field_id\": 4,\n                    \"value\": \"USA\"\n                }\n            }\n        ]\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "item": [
+        {
+          "name": "GetCampaigns",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Test to explain the fields in the response",
+                  "pm.test(\"Explanation for the fields in the response\", function () {",
+                  "    var responseJSON = pm.response.json();",
+                  "",
+                  "    // Check for the presence of status field",
+                  "    pm.expect(responseJSON).to.have.property('status').that.is.a('string');",
+                  "",
+                  "    // Check for the presence of items field",
+                  "    pm.expect(responseJSON).to.have.property('items').that.is.an('array');",
+                  "",
+                  "    // Check the structure of each group in the items array",
+                  "    responseJSON.items.forEach((group) => {",
+                  "        pm.expect(group).to.have.property('id').that.is.a('number');",
+                  "        pm.expect(group).to.have.property('name').that.is.a('string');",
+                  "        pm.expect(group).to.have.property('company_id').that.is.a('number');",
+                  "        pm.expect(group).to.have.property('deleted_at').that.is.a('string');",
+                  "        pm.expect(group).to.have.property('created_at').that.is.a('string');",
+                  "        pm.expect(group).to.have.property('updated_at').that.is.a('string');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getCampaigns?token={{token}}&type=api",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getCampaigns"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "type",
+                  "value": "api"
+                }
+              ]
+            },
+            "description": "This endpoint makes an HTTP GET request to retrieve groups from the On Cloud API. It requires a token parameter in the query string. The parameter showContacts can also be included in the query string with a value of \"no\". The request does not contain a request body.\n\nTYPE: bot,api,regular\n\n### Response\n\nThe response to the request has a status code of 200 and returns a JSON object. The object includes a status field and an array of groups, where each group has an id, name, company_id, deleted_at, created_at, and updated_at fields."
+          },
+          "response": []
+        },
+        {
+          "name": "SendCampaigns",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"campaing_id\":1,\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"data\":{\n        \"reservations\":{\n            \"id\":1232,\n            \"status\":\"confirmed\",\n            \"price\":\"45$\"\n        },\n        \"user\":{\n            \"name\":\"Daniel\",\n            \"id\":12\n        }\n    }\n\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendcampaigns",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendcampaigns"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "SendMessage",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"message\":\"Do you like our service\",\n    \"header\":\"Hello there\",\n    \"footer\":\"Thanks\",\n    \"buttons\":[{\n        \"id\":\"yes_12\",\n        \"title\":\"Yes\"\n    },{\n        \"id\":\"no_12\",\n        \"title\":\"No\"\n    }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendmessage",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendmessage"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "SendMessage Copy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"message\":\"Do you like our service\",\n    \"header\":\"Hello there\",\n    \"footer\":\"Thanks\",\n    \"buttons\":[{\n        \"id\":\"yes_12\",\n        \"title\":\"Yes\"\n    },{\n        \"id\":\"no_12\",\n        \"title\":\"No\"\n    }]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendmessage",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendmessage"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "SendImage Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "{{phone}}",
+                  "type": "text"
+                },
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "postman-cloud:///1ef4da76-e8ff-44e0-96db-6aa3a3e19c27"
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendmessage",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendmessage"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "Sendfile Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "{{phone}}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman-cloud:///1ef4da76-e8ff-44e0-96db-6aa3a3e19c27"
+                }
+              ]
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendfile",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendfile"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "GetConversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getConversations/none?mobile_api=true",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getConversations",
+                "none"
+              ],
+              "query": [
+                {
+                  "key": "mobile_api",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "GetMessages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"contact_id\":1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/getMessages",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "getMessages"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        },
+        {
+          "name": "SendMessagesViaContact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "",
+                  "pm.test(\"Response status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Response has the required fields\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData).to.be.an('object');",
+                  "  pm.expect(responseData.status).to.exist;",
+                  "  pm.expect(responseData.message_id).to.exist;",
+                  "  pm.expect(responseData.message_wamid).to.exist;",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Status field must be a non-empty string\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.status).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Status should not be empty\");",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message ID is a non-negative integer\", function () {",
+                  "    const responseData = pm.response.json();",
+                  "    ",
+                  "    pm.expect(responseData).to.be.an('object');",
+                  "    pm.expect(responseData.message_id).to.be.a('number').and.to.satisfy((num) => num >= 0);",
+                  "});",
+                  "",
+                  "",
+                  "pm.test(\"Message_wamid is a non-empty string\", function () {",
+                  "  const responseData = pm.response.json();",
+                  "  ",
+                  "  pm.expect(responseData.message_wamid).to.be.a('string').and.to.have.lengthOf.at.least(1, \"Message_wamid should not be empty\");",
+                  "});",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/wpbox/sendMessagesViaContact",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "wpbox",
+                "sendMessagesViaContact"
+              ]
+            },
+            "description": "### Send Message to WhatsApp On Cloud API\n\nThis endpoint allows you to send a custom message to a phone number.\n\nUse this API if you are sure client has responded / send you message in less than 24 hours.\n\n---\n\n**Request Body**\n\n- `token` (string) - The token for authentication.\n    \n- `phone` (string) - The phone number of the recipient.\n    \n- `message` (string) - The message to be sent\n    \n- `buttons` (array) - List of buttons\n    \n- `header` (string) - Header - only applied if there are buttons\n    \n- `footer` (string) - Header - only applied if there are buttons\n    \n\n---\n\n**Response**\n\n- `status` (string) - The status of the message delivery.\n    \n- `message_id` (integer) - The ID of the sent message.\n    \n- `message_wamid` (string) - The WhatsApp message ID.\n    \n\n_Note: A status code of 200 indicates a successful request._"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reservations",
+      "item": [
+        {
+          "name": "MakeReservation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\",\n    \"name\":\"Daniel\",\n    \"source\":\"web\",\n    \"start_date\":\"2024-09-20 00:42:00\",\n    \"end_date\":\"2024-09-30 00:42:00\",\n    \"format\":\"Y-m-d H:i:s\",\n    \"external_id\":\"12\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://apps.oncloudapi.com/api/reminders/reservation/makeReservation",
+              "protocol": "https",
+              "host": [
+                "apps",
+                "oncloudapi",
+                "com"
+              ],
+              "path": [
+                "api",
+                "reminders",
+                "reservation",
+                "makeReservation"
+              ]
+            },
+            "description": "### Make Contact\n\nThis endpoint allows you to make contact with a user.\n\n- The request should be sent to `{{api_endpoint}}api/wpbox/makeContact` using the HTTP POST method.\n    \n\n#### Request Body\n\nThe request body should be in the raw format and include the following parameters:\n\n- `token` (string): The token for authentication.\n- `phone` (string): The phone number of the contact.\n    \n\n#### Response\n\n- Status: 200 OK\n- `status` (string): The status of the contact request.\n- `contact` (object): Details of the contact including id, name, phone, avatar, country_id, company_id, deleted_at, created_at, updated_at, last_reply_at, last_client_reply_at, last_support_reply_at, last_message, is_last_message_by_contact, has_chat, resolved_chat, user_id, and enabled_ai_bot."
+          },
+          "response": [
+            {
+              "name": "SendMessage Example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\":\"{{token}}\",\n    \"phone\":\"{{phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{api_endpoint}}api/wpbox/makeContact",
+                  "host": [
+                    "{{api_endpoint}}api"
+                  ],
+                  "path": [
+                    "wpbox",
+                    "makeContact"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "localhost"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:02:06 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:02:06 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.2.3"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "XSRF-TOKEN=eyJpdiI6Img2eHlkaGhTVDY1d3RQSmE5R0Y3VVE9PSIsInZhbHVlIjoiK0JCWWxhdlZFM2U5aEVEeWxndTNSNFEvNlYzR0VsdmlIVmIvdHpjaEtyWWlOOUF0SHRpY2p1enRwZmYyZ1N4eFZ4OTFMdDVnZzBZVzdWQm1ZRkRrMDlIbVVJTzA3SlF5MzRZS1RSdnVseXpuZlV2OUtscElSa2ZyTmRKOE9lK2ciLCJtYWMiOiI5OWY0YzkxODEzOTIwYjdkNmRhODQxZWVlNDU0ZmUwNjY1ZDIzMmVjYTExNTU0ZDkzYzBlMjFlMzQ4ZDAwMDQyIiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:02:06 GMT; Max-Age=7200; path=/; samesite=lax"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "site_session=eyJpdiI6IjdBZW1PaTJ2QUcvN2s0QU5ydWRpeXc9PSIsInZhbHVlIjoiR3VyZkVpL3FSb1k1d1NYejhzN1V4NVMwOVNUWS9ROXBpalIvRHVzR0pqSmhuWXBUdHRvS29CdEdRODd6Y09Vb29sU0ZJQU8wVE1mOC8vcFg4Ym0zMm1lRXR2a1pKN2QxTkhKR00rZ1B2TUxKL1VmWE5GVVI2dGZyYzh5dGhOVlIiLCJtYWMiOiJjOGNjZjJiNjAyNjA1ZDcwMDJkNmM1MWQ5YjAwODRlMjA4ZmU5Y2QwMDZiMzBjMTVlMjE1MTQ1MWE0MTc3YjdjIiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:02:06 GMT; Max-Age=7200; path=/; httponly; samesite=lax"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"status\": \"success\",\n    \"contact\": {\n        \"id\": 1,\n        \"name\": \"Daniel Dimov\",\n        \"phone\": \"+38978203673\",\n        \"avatar\": \"https://secure.gravatar.com/avatar/e2909c35cdbad84bf2b6059fe7eab2444cd6bd9fbf8af59918a1d0f4901c8ad2?s=128\",\n        \"country_id\": 124,\n        \"company_id\": 1,\n        \"deleted_at\": null,\n        \"created_at\": \"2023-12-25T08:42:08.000000Z\",\n        \"updated_at\": \"2023-12-25T08:42:08.000000Z\",\n        \"last_reply_at\": \"2023-12-25 09:42:08\",\n        \"last_client_reply_at\": null,\n        \"last_support_reply_at\": \"2023-12-25 09:42:08\",\n        \"last_message\": \"Sure, you can visit us from 09AM - 08PM\",\n        \"is_last_message_by_contact\": 0,\n        \"has_chat\": 1,\n        \"resolved_chat\": 0,\n        \"user_id\": null,\n        \"enabled_ai_bot\": 1\n    }\n}"
+            },
+            {
+              "name": "Invalid Token",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\":\"{{token}}s\",\n    \"phone\":\"{{phone}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{api_endpoint}}api/wpbox/makeContact",
+                  "host": [
+                    "{{api_endpoint}}api"
+                  ],
+                  "path": [
+                    "wpbox",
+                    "makeContact"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Host",
+                  "value": "localhost"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:04:36 GMT"
+                },
+                {
+                  "key": "Date",
+                  "value": "Mon, 25 Dec 2023 10:04:36 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "close"
+                },
+                {
+                  "key": "X-Powered-By",
+                  "value": "PHP/8.2.3"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, private"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "XSRF-TOKEN=eyJpdiI6ImhLMk5zU3lidFgvN2FaYzYxeFh1MWc9PSIsInZhbHVlIjoiVEpVeXhQV0FjVG5ERVl4VGtWMS9iYTNuQXZOK09rSnF3L09XbnpESVpDUDdjU1Z2SDMwUjdZTHpSUUs1bVU0SWZjOU1wNGxPMEJ2RHJyalZheW9MTGcwMFpBNXZnWnpIVWszMm9lMHo3eUVmaU1ZZUNuWnhGdUpBZS9FVFlGa0kiLCJtYWMiOiI4YjI2NjkxMDNlNGUzN2U2MDg5NzdmYWI0MGMxZTRmMjFiMDYwZWIzODYyZTI0YTY2MzZkMzkwZjkwNzRhYzE0IiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:04:36 GMT; Max-Age=7200; path=/; samesite=lax"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "site_session=eyJpdiI6Ii8zZ0liYjZSMnUyejBlUThRT0Noa0E9PSIsInZhbHVlIjoiNW9CRXZvczg3bXpsUGVqTmNJdmJXcXNYMDlXcjY2UENneUNzVjF5NzhIbXd3eHNwdXhyZ1VIdC9XYjlGV1BTWC9sWEI0WGpXQ04yZzZQOXJUdEFhOWgwakFRUW41MUZoVEJvKzV1UFlzTXlVRFFobFVXcWkyMDlYNWdIRkZqK0IiLCJtYWMiOiJjZmM0YmY0MDdlOTY2ZGMyOThjZWFjNGQwMzI3M2U4ZDcwYTdiODAwZTg0OTY3Zjg3NDgzMjEzMzQyNmIyNTI3IiwidGFnIjoiIn0%3D; expires=Mon, 25 Dec 2023 12:04:36 GMT; Max-Age=7200; path=/; httponly; samesite=lax"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"status\": \"error\",\n    \"message\": \"Invalid token\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agent API",
+      "item": [
+        {
+          "name": "New Request",
+          "request": {
+            "method": "GET",
+            "header": []
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ]
+}

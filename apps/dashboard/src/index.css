@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  /* Bitrix24 Sidebar (dark) */
+  --color-b24-sidebar: #1a2332;
+  --color-b24-sidebar-hover: #243044;
+  --color-b24-sidebar-active: #2d3e54;
+  --color-b24-sidebar-text: #b8c5d4;
+  --color-b24-sidebar-text-muted: #6b7e94;
+
+  /* Bitrix24 Content Area (light) */
+  --color-b24-bg: #eef2f5;
+  --color-b24-surface: #ffffff;
+  --color-b24-surface2: #f7f9fb;
+
+  /* Bitrix24 Primary Colors */
+  --color-b24-blue: #2dbcf5;
+  --color-b24-blue-dark: #00aeef;
+  --color-b24-blue-light: #e8f7fd;
+  --color-b24-green: #75c900;
+  --color-b24-green-light: #f0f9e8;
+  --color-b24-orange: #ff7e00;
+  --color-b24-red: #ff5752;
+  --color-b24-yellow: #f5c400;
+
+  /* Typography */
+  --color-b24-text: #333333;
+  --color-b24-text-muted: #828282;
+  --color-b24-text-light: #a8a8a8;
+
+  /* Borders */
+  --color-b24-border: #dfe0e3;
+  --color-b24-border-light: #eceef0;
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-b24-bg text-b24-text font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-b24-blue text-white px-4 py-2 rounded font-medium text-sm transition-colors hover:bg-b24-blue-dark focus:outline-none focus:ring-2 focus:ring-b24-blue/40 cursor-pointer;
+  }
+  .btn-secondary {
+    @apply bg-white text-b24-text border border-b24-border px-4 py-2 rounded font-medium text-sm transition-colors hover:bg-b24-surface2 focus:outline-none cursor-pointer;
+  }
+  .btn-danger {
+    @apply bg-b24-red/10 text-b24-red border border-b24-red/30 px-3 py-1.5 rounded text-xs font-medium transition-colors hover:bg-b24-red hover:text-white cursor-pointer;
+  }
+  .card {
+    @apply bg-b24-surface rounded-lg border border-b24-border shadow-sm;
+  }
+  .input-field {
+    @apply bg-white border border-b24-border rounded px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full;
+  }
+  .select-field {
+    @apply bg-white border border-b24-border rounded px-3 py-2 text-b24-text text-sm focus:outline-none focus:border-b24-blue focus:ring-2 focus:ring-b24-blue/20 transition-all w-full cursor-pointer;
+  }
+  .badge-active {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-b24-green-light text-b24-green;
+  }
+  .badge-inactive {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-b24-red;
+  }
+  .badge-pending {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 text-b24-yellow;
+  }
+  .page-header {
+    @apply bg-b24-surface border-b border-b24-border px-8 py-5;
+  }
+  .table-header {
+    @apply text-left text-xs font-semibold text-b24-text-muted uppercase tracking-wider bg-b24-surface2 border-b border-b24-border;
+  }
+}

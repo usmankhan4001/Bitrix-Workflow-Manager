@@ -1,51 +1,89 @@
 @import "tailwindcss";
 
-/* ─────────────────────────────────────────────
-   Bitrix24 templates-dashboard exact dark theme
-   Extracted from live https://bitrix24.github.io/templates-dashboard/
-   ───────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Bitrix24 templates-dashboard — LIGHT theme (default)
+   ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Backgrounds */
-  --b24-bg:              #000000;   /* body */
-  --b24-sidebar:         #1a1a1a;   /* sidebar */
-  --b24-card:            #262626;   /* cards / panels */
-  --b24-card-hover:      #2d2d2d;   /* hover state */
-  --b24-input-bg:        #1f1f1f;   /* form inputs */
+  --b24-bg:              #edeef0;
+  --b24-sidebar:         #ffffff;
+  --b24-card:            #ffffff;
+  --b24-card-hover:      #f5f5f7;
+  --b24-input-bg:        #f5f5f7;
 
-  /* Dividers */
-  --b24-divider:         #323232;   /* --ui-color-divider-default */
+  --b24-divider:         #dfe0e3;
+  --b24-divider-light:   #eaebee;
+
+  --b24-text:            #1a1a1a;
+  --b24-text-muted:      #535c69;
+  --b24-text-faint:      #a8b1bd;
+
+  --b24-primary:         #1587fa;
+  --b24-primary-dim:     rgba(21, 135, 250, 0.10);
+  --b24-primary-ring:    rgba(21, 135, 250, 0.22);
+
+  --b24-nav-active:      rgba(21, 135, 250, 0.10);
+  --b24-nav-icon:        rgba(21, 135, 250, 0.15);
+
+  --b24-green:           #1cae6a;
+  --b24-green-dim:       rgba(28, 174, 106, 0.10);
+  --b24-green-ring:      rgba(28, 174, 106, 0.25);
+  --b24-red:             #f2473d;
+  --b24-red-dim:         rgba(242, 71, 61, 0.10);
+  --b24-red-ring:        rgba(242, 71, 61, 0.25);
+  --b24-orange:          #e09800;
+  --b24-orange-dim:      rgba(224, 152, 0, 0.10);
+  --b24-orange-ring:     rgba(224, 152, 0, 0.25);
+
+  --b24-sidebar-w:       200px;
+  --b24-header-h:        56px;
+  --b24-radius:          10px;
+  --b24-radius-sm:       6px;
+
+  /* Button secondary light */
+  --b24-btn-sec-bg:      #f0f1f3;
+  --b24-btn-sec-hover:   #e4e5e8;
+  --b24-btn-sec-color:   #535c69;
+  --b24-scrollbar:       #d0d3d8;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DARK theme
+   ───────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --b24-bg:              #000000;
+  --b24-sidebar:         #1a1a1a;
+  --b24-card:            #262626;
+  --b24-card-hover:      #2d2d2d;
+  --b24-input-bg:        #1f1f1f;
+
+  --b24-divider:         #323232;
   --b24-divider-light:   #2a2a2a;
 
-  /* Text */
-  --b24-text:            #f8f8f8;   /* --ui-color-base-1 */
-  --b24-text-muted:      #828b95;   /* --ui-color-palette-gray-70 */
-  --b24-text-faint:      #525c69;   /* --ui-color-palette-gray-90 */
+  --b24-text:            #f8f8f8;
+  --b24-text-muted:      #828b95;
+  --b24-text-faint:      #525c69;
 
-  /* Brand */
-  --b24-primary:         #1587fa;   /* rgb(21,135,250) */
+  --b24-primary:         #1587fa;
   --b24-primary-dim:     rgba(21, 135, 250, 0.12);
   --b24-primary-ring:    rgba(21, 135, 250, 0.25);
 
-  /* Nav active — rgb(31,48,72) / #1f3048 */
   --b24-nav-active:      #1f3048;
-  --b24-nav-icon:        #062040;   /* icon circle on active item */
+  --b24-nav-icon:        #062040;
 
-  /* Semantic */
-  --b24-green:           #1cae6a;   /* rgb(28,174,106) */
+  --b24-green:           #1cae6a;
   --b24-green-dim:       rgba(28, 174, 106, 0.12);
   --b24-green-ring:      rgba(28, 174, 106, 0.3);
-  --b24-red:             #f2473d;   /* rgb(242,71,61) */
+  --b24-red:             #f2473d;
   --b24-red-dim:         rgba(242, 71, 61, 0.12);
   --b24-red-ring:        rgba(242, 71, 61, 0.3);
   --b24-orange:          #e09800;
   --b24-orange-dim:      rgba(224, 152, 0, 0.12);
   --b24-orange-ring:     rgba(224, 152, 0, 0.3);
 
-  /* Layout */
-  --b24-sidebar-w:       190px;
-  --b24-header-h:        58px;      /* 3.625rem */
-  --b24-radius:          12px;      /* --ui-border-radius-md: 10px, cards are 12px */
-  --b24-radius-sm:       6px;
+  --b24-btn-sec-bg:      #2e2e2e;
+  --b24-btn-sec-hover:   #373737;
+  --b24-btn-sec-color:   #828b95;
+  --b24-scrollbar:       #3a3a3a;
 }
 
 /* ── Reset ── */
@@ -58,6 +96,7 @@
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    transition: background 0.2s, color 0.2s;
   }
   button { font-family: inherit; cursor: pointer; }
   input, select, textarea { font-family: inherit; }
@@ -70,9 +109,10 @@
   border-radius: var(--b24-radius);
   border: 1px solid var(--b24-divider);
   overflow: hidden;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-/* ── Section panels (stacked top/body like B24PageCard pattern) ── */
+/* ── Section panels ── */
 .b24-section-top {
   background: var(--b24-card);
   border: 1px solid var(--b24-divider);
@@ -88,7 +128,7 @@
   overflow: hidden;
 }
 
-/* ── Navbar / header ── */
+/* ── Navbar ── */
 .b24-navbar {
   height: var(--b24-header-h);
   background: var(--b24-card);
@@ -100,16 +140,17 @@
   flex-shrink: 0;
 }
 
-/* ── Toolbar (filter row below navbar) ── */
-.b24-toolbar {
-  background: var(--b24-card);
-  border-bottom: 1px solid var(--b24-divider);
-  padding: 8px 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
+/* ── Two-column layout ── */
+.b24-two-col {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  padding: 16px 20px;
+  align-items: start;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .b24-two-col { grid-template-columns: 1fr; }
 }
 
 /* ── Buttons ── */
@@ -130,7 +171,6 @@
 }
 .b24-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* air-primary */
 .b24-btn-primary {
   background: var(--b24-primary);
   color: #fff;
@@ -138,50 +178,24 @@
 }
 .b24-btn-primary:hover:not(:disabled) { background: #0e70d6; border-color: #0e70d6; }
 
-/* air-secondary */
 .b24-btn-secondary {
-  background: #2e2e2e;
-  color: var(--b24-text-muted);
+  background: var(--b24-btn-sec-bg);
+  color: var(--b24-btn-sec-color);
   border-color: var(--b24-divider);
 }
 .b24-btn-secondary:hover:not(:disabled) {
-  background: #373737;
+  background: var(--b24-btn-sec-hover);
   color: var(--b24-text);
-  border-color: #404040;
 }
 
-/* air-tertiary-no-accent (ghost) */
 .b24-btn-ghost {
   background: transparent;
   color: var(--b24-text-muted);
   border-color: transparent;
 }
 .b24-btn-ghost:hover:not(:disabled) {
-  background: #2e2e2e;
+  background: var(--b24-btn-sec-bg);
   color: var(--b24-text);
-}
-
-/* Filter pill — like the period selector in toolbar */
-.b24-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid var(--b24-divider);
-  background: transparent;
-  color: var(--b24-text-muted);
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-  white-space: nowrap;
-}
-.b24-pill:hover { background: #2e2e2e; color: var(--b24-text); }
-.b24-pill-active {
-  background: var(--b24-primary);
-  color: #fff;
-  border-color: var(--b24-primary);
 }
 
 /* ── Inputs ── */
@@ -217,7 +231,6 @@
   outline: none;
   cursor: pointer;
   appearance: auto;
-  color-scheme: dark;
   transition: border-color 0.12s;
 }
 .b24-select:focus {
@@ -236,20 +249,17 @@
   font-weight: 600;
   line-height: 1.4;
 }
-.b24-badge-success { background: var(--b24-green-dim); color: var(--b24-green); border: 1px solid var(--b24-green-ring); }
-.b24-badge-alert   { background: var(--b24-red-dim);   color: var(--b24-red);   border: 1px solid var(--b24-red-ring); }
-.b24-badge-warning { background: var(--b24-orange-dim); color: var(--b24-orange); border: 1px solid var(--b24-orange-ring); }
-.b24-badge-neutral { background: rgba(130,139,149,0.12); color: var(--b24-text-muted); border: 1px solid rgba(130,139,149,0.25); }
+.b24-badge-success { background: var(--b24-green-dim);   color: var(--b24-green);   border: 1px solid var(--b24-green-ring); }
+.b24-badge-alert   { background: var(--b24-red-dim);     color: var(--b24-red);     border: 1px solid var(--b24-red-ring); }
+.b24-badge-warning { background: var(--b24-orange-dim);  color: var(--b24-orange);  border: 1px solid var(--b24-orange-ring); }
+.b24-badge-neutral { background: rgba(130,139,149,0.10); color: var(--b24-text-muted); border: 1px solid rgba(130,139,149,0.2); }
 .b24-badge-primary { background: var(--b24-primary-dim); color: var(--b24-primary); border: 1px solid var(--b24-primary-ring); }
 
-/* ── Stat icon (rounded-full bg-primary/10 ring-inset) ── */
+/* ── Stat icon ── */
 .b24-stat-icon {
-  width: 38px;
-  height: 38px;
+  width: 38px; height: 38px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
@@ -278,12 +288,12 @@
   vertical-align: middle;
 }
 
-/* ── Form row (settings) ── */
+/* ── Form row ── */
 .b24-form-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 16px 0;
+  padding: 14px 0;
   border-bottom: 1px solid var(--b24-divider-light);
   gap: 16px;
 }
@@ -292,8 +302,7 @@
 /* ── Toggle switch ── */
 .b24-toggle {
   position: relative;
-  width: 42px;
-  height: 22px;
+  width: 42px; height: 22px;
   border-radius: 11px;
   border: none;
   flex-shrink: 0;
@@ -302,30 +311,41 @@
 .b24-toggle-knob {
   position: absolute;
   top: 3px;
-  width: 16px;
-  height: 16px;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   transition: left 0.2s;
 }
 
+/* ── Member row (Assignment page) ── */
+.b24-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--b24-divider-light);
+  transition: background 0.1s;
+  background: var(--b24-card);
+}
+.b24-member-row:last-child { border-bottom: none; }
+.b24-member-row:hover { background: var(--b24-card-hover); }
+
 /* ── Sidebar nav hover ── */
-.b24-nav-link:hover { background: rgba(255,255,255,0.05) !important; }
+.b24-nav-link:hover { background: var(--b24-card-hover) !important; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #4a4a4a; }
+::-webkit-scrollbar-thumb { background: var(--b24-scrollbar); border-radius: 3px; }
 
 /* ── Spinner ── */
 @keyframes b24spin { to { transform: rotate(360deg); } }
 .b24-spin { animation: b24spin 0.8s linear infinite; }
 
-/* ── Code / mono ── */
+/* ── Code ── */
 .b24-code {
-  background: #1f1f1f;
+  background: var(--b24-input-bg);
   border: 1px solid var(--b24-divider);
   border-radius: 4px;
   padding: 1px 6px;

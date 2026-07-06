@@ -6,6 +6,7 @@ import Assignment from './pages/Assignment';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
 import { initBX24 } from './lib/bx24';
+import { ThemeProvider } from './lib/theme';
 
 const DashboardLayout = () => (
   <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--b24-bg)' }}>
@@ -38,6 +39,7 @@ function App() {
   }
 
   return (
+    <ThemeProvider>
     <Router>
       <Routes>
         <Route path="/dashboard" element={<DashboardLayout />}>
@@ -52,6 +54,7 @@ function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
+    </ThemeProvider>
   );
 }
 

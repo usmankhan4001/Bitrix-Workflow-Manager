@@ -26,6 +26,8 @@ interface LeadDetails {
   sourceId: string;
   title: string;
   phone?: string;
+  email?: string;
+  isReturnCustomer?: boolean;
   assignedById?: string;
   modifyById?: string;
 }
@@ -40,9 +42,49 @@ interface BitrixCreds {
 @Injectable()
 export class WorkflowService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WorkflowService.name);
+  private readonly activeAssignments = new Set<string>();
 
   constructor(private readonly whatsapp: WhatsappService) {
     super();
+  }
+
+  getPKTime(): { day: number; hour: number; minute: number } {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      hourCycle: 'h23',
+      weekday: 'short',
+      hour: 'numeric',
+      minute: 'numeric',
+    });
+    const parts = formatter.formatToParts(now);
+    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+
+    const weekdayMap: Record<string, number> = {
+      'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6
+    };
+
+    const day = weekdayMap[partMap.weekday] ?? 0;
+    const hour = parseInt(partMap.hour, 10);
+    const minute = parseInt(partMap.minute, 10);
+
+    return { day, hour, minute };
+  }
+
+  getPKTMidnight(): Date {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
+    const parts = formatter.formatToParts(now);
+    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+
+    const isoString = `${partMap.year}-${partMap.month.padStart(2, '0')}-${partMap.day.padStart(2, '0')}T00:00:00+05:00`;
+    return new Date(isoString);
   }
 
   async onModuleInit() {
@@ -143,8 +185,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   }
 
   async getAssignedTodayCount() {
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
+    const midnight = this.getPKTMidnight();
     return this.assignmentLog.count({ where: { assigned_at: { gte: midnight } } });
   }
 
@@ -186,20 +227,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // ─── Time / Day Helpers ────────────────────────────────────────────────────
 
   isWithinBusinessHours(settings: Record<string, string>): boolean {
-    const now = new Date();
-    // Adjust for PKT (UTC+5)
-    const pkt = new Date(now.getTime() + 5 * 3600 * 1000);
-    const currentDay = pkt.getUTCDay();
-    const currentHour = pkt.getUTCHours();
-    const currentMin = pkt.getUTCMinutes();
+    const { day, hour, minute } = this.getPKTime();
 
     const notAllowed: number[] = JSON.parse(settings.NOT_ALLOWED_DAYS || '[0,6]');
-    if (notAllowed.includes(currentDay)) return false;
+    if (notAllowed.includes(day)) return false;
 
     const [startH, startM] = (settings.WORKFLOW_START_TIME || '09:00').split(':').map(Number);
     const [endH, endM] = (settings.WORKFLOW_END_TIME || '18:00').split(':').map(Number);
 
-    const currentMins = currentHour * 60 + currentMin;
+    const currentMins = hour * 60 + minute;
     const startMins = startH * 60 + startM;
     const endMins = endH * 60 + endM;
 
@@ -265,6 +301,10 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       if (lead.PHONE && Array.isArray(lead.PHONE) && lead.PHONE.length > 0) {
         phone = lead.PHONE[0]?.VALUE || '';
       }
+      let email = '';
+      if (lead.EMAIL && Array.isArray(lead.EMAIL) && lead.EMAIL.length > 0) {
+        email = lead.EMAIL[0]?.VALUE || '';
+      }
 
       return {
         name: displayName,
@@ -272,6 +312,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         sourceId,
         title: lead.TITLE || displayName,
         phone,
+        email,
+        isReturnCustomer: lead.IS_RETURN_CUSTOMER === 'Y',
         assignedById: lead.ASSIGNED_BY_ID,
         modifyById: lead.MODIFY_BY_ID,
       };
@@ -279,6 +321,59 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       this.logger.warn(`fetchLeadDetails failed for #${leadId}: ${(err as Error).message}`);
       return { name: `Lead #${leadId}`, source: 'CRM', sourceId: '', title: `Lead #${leadId}` };
     }
+  }
+
+  // ─── Duplicate detection ───────────────────────────────────────────────────
+  // The same person often enters Bitrix as several leads from different sources
+  // (e.g. Website + CRM form). We skip the duplicate so it isn't round-robined to
+  // a second rep — a manager reviews/merges it instead. A lead is a duplicate when
+  // Bitrix flags it as a repeat customer, OR another lead already exists with the
+  // same phone/email.
+
+  // Ask Bitrix for other lead IDs that share this phone/email (excludes the lead itself).
+  private async findDuplicateLeadIds(
+    leadId: string,
+    phone: string,
+    email: string,
+    creds: BitrixCreds,
+  ): Promise<string[]> {
+    const matches = new Set<string>();
+    const lookups: Array<{ type: string; value: string }> = [];
+    if (phone) lookups.push({ type: 'PHONE', value: phone });
+    if (email) lookups.push({ type: 'EMAIL', value: email });
+
+    for (const { type, value } of lookups) {
+      try {
+        const sep = this.bitrixUrl('crm.duplicate.findbycomm', creds).includes('?') ? '&' : '?';
+        const url = `${this.bitrixUrl('crm.duplicate.findbycomm', creds)}${sep}type=${type}&entity_type=LEAD&values[]=${encodeURIComponent(value)}`;
+        const res = await fetch(url);
+        const data = (await res.json()) as any;
+        const ids: any[] = data.result?.LEAD || [];
+        for (const id of ids) {
+          if (String(id) !== String(leadId)) matches.add(String(id));
+        }
+      } catch (err) {
+        this.logger.warn(`findDuplicateLeadIds (${type}) failed for #${leadId}: ${(err as Error).message}`);
+      }
+    }
+    return [...matches];
+  }
+
+  async isDuplicateLead(leadId: string, lead: LeadDetails, creds: BitrixCreds): Promise<{ duplicate: boolean; reason?: string }> {
+    // If we've already processed THIS lead before, it isn't a *new* duplicate
+    // (e.g. an overdue re-assignment of a lead we already own).
+    const ownLog = await this.assignmentLog.findFirst({ where: { lead_id: String(leadId) } });
+    if (ownLog) return { duplicate: false };
+
+    // Bitrix's own repeat-customer flag
+    if (lead.isReturnCustomer) return { duplicate: true, reason: 'Bitrix marked it as a repeat customer' };
+
+    // Same phone / email on another lead
+    const dupIds = await this.findDuplicateLeadIds(String(leadId), lead.phone || '', lead.email || '', creds);
+    if (dupIds.length > 0) {
+      return { duplicate: true, reason: `matches existing lead(s) ${dupIds.join(', ')} by phone/email` };
+    }
+    return { duplicate: false };
   }
 
   // ─── Bitrix24: Count tasks for a lead ─────────────────────────────────────
@@ -404,6 +499,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     team: string,
     creds: BitrixCreds,
     force = false,
+    targetAgent?: any,
   ): Promise<{ success: boolean; agent?: any; taskId?: string | null; skipped?: boolean; queued?: boolean; message?: string }> {
     const settings = await this.getSettings();
 
@@ -412,59 +508,94 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return { success: false, message: 'Workflow engine is paused' };
     }
 
-    // Gap 2: Queue leads arriving outside business hours if not forced
-    if (!force && !this.isWithinBusinessHours(settings)) {
-      this.logger.log(`Lead #${leadId} arrived outside business hours. Queueing in LateLead...`);
-      await this.storeLateLeadIfAbsent(leadId);
-      return { success: true, queued: true, message: 'Outside business hours, lead queued.' };
+    const cleanLeadId = String(leadId);
+
+    // Concurrency Lock: Serialize concurrent calls for the same lead
+    if (this.activeAssignments.has(cleanLeadId)) {
+      this.logger.log(`Lead #${cleanLeadId} assignment is already in progress. Skipping concurrent request.`);
+      return { success: false, message: 'Assignment already in progress' };
     }
+    this.activeAssignments.add(cleanLeadId);
 
-    // Skip sources outside the allow-list (empty list = all allowed)
-    const lead = await this.fetchLeadDetails(leadId, creds);
-    if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
-      this.logger.log(`Lead #${leadId} skipped — source "${lead.sourceId}" is not allowed`);
-      await this.lateLead.updateMany({ where: { lead_id: leadId }, data: { processed: true, processed_at: new Date() } });
-      return { success: true, skipped: true, message: `Source "${lead.sourceId}" is not allowed` };
-    }
-
-    const agent = await this.pickNextAgent(team);
-    if (!agent) return { success: false, message: `No active agents in team "${team}"` };
-
-    const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
-
-    const [, taskId] = await Promise.all([
-      this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds),
-      this.createBitrixTask(leadId, lead.name, agent.bitrix_user_id, creds, slaHours),
-    ]);
-
-    const log = await this.assignmentLog.create({
-      data: { lead_id: leadId, agent_id: agent.id, agent_name: agent.name, team },
-    });
-
-    await this.lateLead.updateMany({
-      where: { lead_id: leadId },
-      data: { processed: true, processed_at: new Date() },
-    });
-
-    // WhatsApp notification
-    let waNotified = false;
-    if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
-      waNotified = await this.whatsapp.sendLeadAssignedNotification(
-        agent.whatsapp_phone,
-        agent.name.split(' ')[0],
-        lead.name,
-        lead.source,
-        settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
-        settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
-        lead.phone,
-      );
-      if (waNotified) {
-        await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
+    try {
+      // Prevent duplicate assignment if not forced and not a specific reassignment
+      if (!force && !targetAgent) {
+        const existing = await this.assignmentLog.findFirst({
+          where: { lead_id: cleanLeadId },
+        });
+        if (existing) {
+          this.logger.log(`Lead #${cleanLeadId} has already been assigned to ${existing.agent_name}. Skipping.`);
+          return { success: true, skipped: true, message: `Lead already assigned to ${existing.agent_name}` };
+        }
       }
-    }
 
-    this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}]. Task: ${taskId}. WA: ${waNotified}`);
-    return { success: true, agent, taskId };
+      // Gap 2: Queue leads arriving outside business hours if not forced
+      if (!force && !this.isWithinBusinessHours(settings)) {
+        this.logger.log(`Lead #${cleanLeadId} arrived outside business hours. Queueing in LateLead...`);
+        await this.storeLateLeadIfAbsent(cleanLeadId);
+        return { success: true, queued: true, message: 'Outside business hours, lead queued.' };
+      }
+
+      // Skip sources outside the allow-list (empty list = all allowed)
+      const lead = await this.fetchLeadDetails(cleanLeadId, creds);
+      if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
+        this.logger.log(`Lead #${cleanLeadId} skipped — source "${lead.sourceId}" is not allowed`);
+        await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
+        return { success: true, skipped: true, message: `Source "${lead.sourceId}" is not allowed` };
+      }
+
+      // Skip duplicate leads (same person arriving from another source) so they aren't
+      // assigned to a second rep. Left untouched for a manager to review/merge.
+      if (!force && !targetAgent) {
+        const dup = await this.isDuplicateLead(cleanLeadId, lead, creds);
+        if (dup.duplicate) {
+          this.logger.log(`Lead #${cleanLeadId} ("${lead.name}") skipped — duplicate: ${dup.reason}`);
+          await this.lateLead.updateMany({ where: { lead_id: cleanLeadId }, data: { processed: true, processed_at: new Date() } });
+          return { success: true, skipped: true, message: `Duplicate lead — ${dup.reason}. Left for manager review.` };
+        }
+      }
+
+      const agent = targetAgent || await this.pickNextAgent(team);
+      if (!agent) return { success: false, message: `No active agents in team "${team}"` };
+
+      const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
+
+      const [, taskId] = await Promise.all([
+        this.assignLeadInBitrix(cleanLeadId, agent.bitrix_user_id, creds),
+        this.createBitrixTask(cleanLeadId, lead.name, agent.bitrix_user_id, creds, slaHours),
+      ]);
+
+      const log = await this.assignmentLog.create({
+        data: { lead_id: cleanLeadId, agent_id: agent.id, agent_name: agent.name, team },
+      });
+
+      await this.lateLead.updateMany({
+        where: { lead_id: cleanLeadId },
+        data: { processed: true, processed_at: new Date() },
+      });
+
+      // WhatsApp notification
+      let waNotified = false;
+      if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
+        waNotified = await this.whatsapp.sendLeadAssignedNotification(
+          agent.whatsapp_phone,
+          agent.name.split(' ')[0],
+          lead.name,
+          lead.source,
+          settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
+          settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+          lead.phone,
+        );
+        if (waNotified) {
+          await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
+        }
+      }
+
+      this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}]. Task: ${taskId}. WA: ${waNotified}`);
+      return { success: true, agent, taskId };
+    } finally {
+      this.activeAssignments.delete(cleanLeadId);
+    }
   }
 
   // ─── GAP 1: Cron — Process all queued late leads ──────────────────────────
@@ -599,7 +730,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         const targetAgent = await this.agent.findUnique({ where: { id: completedEntry.agent_id } });
         if (targetAgent) {
           this.logger.log(`Overdue lead #${leadId}: re-assigning to ${targetAgent.name} (was in completed queue)`);
-          await this.processLeadAssignment(String(leadId), targetAgent.team, creds);
+          await this.processLeadAssignment(String(leadId), targetAgent.team, creds, false, targetAgent);
           return { action: 'reassigned', detail: `Reassigned to ${targetAgent.name} from completed queue` };
         }
       }
@@ -762,8 +893,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const queueDepth = await this.lateLead.count({ where: { processed: false } });
 
     // Assigned today count
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
+    const midnight = this.getPKTMidnight();
     const assignedToday = await this.assignmentLog.count({ where: { assigned_at: { gte: midnight } } });
 
     // Per-agent workload today

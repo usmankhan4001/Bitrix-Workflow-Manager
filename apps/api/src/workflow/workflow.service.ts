@@ -555,10 +555,57 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         }
       }
 
-      const agent = targetAgent || await this.pickNextAgent(team);
-      if (!agent) return { success: false, message: `No active agents in team "${team}"` };
-
       const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
+
+      const agent = targetAgent || await this.pickNextAgent(team);
+
+      // Fallback: no active agents in the team → route the lead + task to the
+      // Escalation Manager instead of leaving it unassigned.
+      if (!agent) {
+        const managerId = settings.WORKFLOW_MANAGER_ID || '1';
+        const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
+        this.logger.warn(`No active agents in team "${team}" — escalating lead #${cleanLeadId} to manager (Bitrix user ${managerId})`);
+
+        const [, mgrTaskId] = await Promise.all([
+          this.assignLeadInBitrix(cleanLeadId, managerId, creds),
+          this.createBitrixTask(
+            cleanLeadId,
+            lead.name,
+            managerId,
+            creds,
+            slaHours,
+            `⚠️ No agent available: ${lead.name}`,
+            `No active sales agent was available in team "${team}" to take lead "${lead.name}". Please assign it manually.`,
+          ),
+        ]);
+
+        await this.assignmentLog.create({
+          data: {
+            lead_id: cleanLeadId,
+            agent_id: manager?.id || 'escalation-manager',
+            agent_name: manager?.name || `Manager #${managerId}`,
+            team,
+          },
+        });
+        await this.lateLead.updateMany({
+          where: { lead_id: cleanLeadId },
+          data: { processed: true, processed_at: new Date() },
+        });
+
+        if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
+          await this.whatsapp.sendLeadAssignedNotification(
+            manager.whatsapp_phone,
+            manager.name.split(' ')[0],
+            lead.name,
+            lead.source,
+            settings.ONCLOUD_ASSIGN_TEMPLATE || 'lead_assigned',
+            settings.ONCLOUD_TEMPLATE_LANGUAGE || 'en',
+            lead.phone,
+          );
+        }
+
+        return { success: true, agent: manager, taskId: mgrTaskId, message: `No active agents — escalated to manager` };
+      }
 
       const [, taskId] = await Promise.all([
         this.assignLeadInBitrix(cleanLeadId, agent.bitrix_user_id, creds),

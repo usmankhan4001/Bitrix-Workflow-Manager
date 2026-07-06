@@ -143,7 +143,7 @@
 /* ── Two-column layout ── */
 .b24-two-col {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr minmax(280px, 340px);
   gap: 16px;
   padding: 16px 20px;
   align-items: start;

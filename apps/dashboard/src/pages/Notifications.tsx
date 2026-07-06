@@ -42,7 +42,6 @@ const FormRow: React.FC<{ label: string; desc?: string; tip?: string; right: Rea
 const Notifications: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -57,7 +56,6 @@ const Notifications: React.FC = () => {
   }, []);
 
   const save = async (key: string, value: string) => {
-    setSaving(key);
     try {
       await fetch(`${API()}/api/workflow/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
       setSettings(s => ({ ...s, [key]: value }));
@@ -65,8 +63,6 @@ const Notifications: React.FC = () => {
     } catch (e) {
       console.error(e);
       showToast('error', 'Failed to save');
-    } finally {
-      setSaving(null);
     }
   };
 

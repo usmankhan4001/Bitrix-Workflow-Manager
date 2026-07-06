@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 const API = () => import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-interface Agent { id: string; bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string; is_active: boolean; }
+interface Agent { id: string; bitrix_user_id: string; name: string; team: string; department_id?: string | null; department_name?: string | null; whatsapp_phone?: string; is_active: boolean; }
 interface BitrixUser { id: string; name: string; email: string; department_id: string | null; department_name: string; phone: string; avatar: string | null; active: boolean; }
+interface BitrixDept { id: string; name: string; }
 
-const TEAMS = ['Sales Executives', 'Telly Sales'];
+const TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
 
 const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--b24-text-muted)', marginBottom: 5 }}>
@@ -16,6 +17,7 @@ const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const TeamManagement: React.FC = () => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [bitrixUsers, setBitrixUsers] = useState<BitrixUser[]>([]);
+  const [departments, setDepartments] = useState<BitrixDept[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -23,6 +25,7 @@ const TeamManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [filterTeam, setFilterTeam] = useState('All');
   const [searchDept, setSearchDept] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
 
   const fetchAgents = async () => {
     setLoadingAgents(true);
@@ -31,7 +34,19 @@ const TeamManagement: React.FC = () => {
   };
   const fetchBitrixUsers = async () => {
     setLoadingUsers(true);
-    try { const r = await fetch(`${API()}/api/bitrix/webhook-users`); if (r.ok) { const d = await r.json(); setBitrixUsers(d.users || []); } }
+    try {
+      const r = await fetch(`${API()}/api/bitrix/webhook-users`);
+      if (r.ok) {
+        const d = await r.json();
+        setBitrixUsers(d.users || []);
+        setDepartments(d.departments || []);
+        // Auto-select B2C dept if available
+        const b2cDept = (d.departments || []).find((dep: BitrixDept) =>
+          dep.name.toLowerCase().includes('b2c') || dep.name.toLowerCase().includes('b 2 c')
+        );
+        if (b2cDept) setDeptFilter(b2cDept.id);
+      }
+    }
     catch (e) { console.error(e); } finally { setLoadingUsers(false); }
   };
   useEffect(() => { fetchAgents(); fetchBitrixUsers(); }, []);
@@ -40,12 +55,13 @@ const TeamManagement: React.FC = () => {
     const g: Record<string, BitrixUser[]> = {};
     for (const u of bitrixUsers) {
       if (!u.active) continue;
+      if (deptFilter && u.department_id !== deptFilter) continue;
       const d = u.department_name || 'No Department';
       if (!g[d]) g[d] = [];
       g[d].push(u);
     }
     return g;
-  }, [bitrixUsers]);
+  }, [bitrixUsers, deptFilter]);
 
   const filteredDepts = useMemo(() => {
     if (!searchDept) return usersByDept;
@@ -68,11 +84,30 @@ const TeamManagement: React.FC = () => {
     if (!form.bitrix_user_id || !form.name) return;
     setSubmitting(true);
     try {
+      const selectedBitrixUser = bitrixUsers.find(u => u.id === form.bitrix_user_id);
       if (editingId) {
-        await fetch(`${API()}/api/workflow/agents/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, team: form.team, whatsapp_phone: form.whatsapp_phone }) });
+        await fetch(`${API()}/api/workflow/agents/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: form.name,
+            team: form.team,
+            whatsapp_phone: form.whatsapp_phone,
+            department_id: selectedBitrixUser?.department_id ?? undefined,
+            department_name: selectedBitrixUser?.department_name ?? undefined,
+          }),
+        });
         setEditingId(null);
       } else {
-        await fetch(`${API()}/api/workflow/agents`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        await fetch(`${API()}/api/workflow/agents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...form,
+            department_id: selectedBitrixUser?.department_id ?? undefined,
+            department_name: selectedBitrixUser?.department_name ?? undefined,
+          }),
+        });
       }
       setForm({ bitrix_user_id: '', name: '', team: TEAMS[0], whatsapp_phone: '' });
       await fetchAgents();
@@ -120,14 +155,14 @@ const TeamManagement: React.FC = () => {
           <div className="b24-section-body">
             <table className="b24-table">
               <thead><tr>
-                <th>Agent</th><th>Bitrix ID</th><th>Team</th><th>WhatsApp</th><th>Status</th>
+                <th>Agent</th><th>Bitrix ID</th><th>Department</th><th>Team</th><th>WhatsApp</th><th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr></thead>
               <tbody>
                 {loadingAgents ? (
-                  <tr><td colSpan={6} style={{ padding: '36px', textAlign: 'center', color: 'var(--b24-text-muted)' }}>Loading…</td></tr>
+                  <tr><td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--b24-text-muted)' }}>Loading…</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: '36px', textAlign: 'center' }}>
+                  <tr><td colSpan={7} style={{ padding: '36px', textAlign: 'center' }}>
                     <p style={{ color: 'var(--b24-text-muted)' }}>No agents yet.</p>
                     <p style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginTop: 4 }}>Add agents using the form →</p>
                   </td></tr>
@@ -142,6 +177,12 @@ const TeamManagement: React.FC = () => {
                       </div>
                     </td>
                     <td style={{ color: 'var(--b24-primary)', fontFamily: 'monospace', fontSize: 12 }}>#{agent.bitrix_user_id}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {agent.department_name
+                        ? <span style={{ padding: '2px 8px', borderRadius: 10, background: 'var(--b24-primary-dim)', color: 'var(--b24-primary)', fontWeight: 500, fontSize: 11 }}>{agent.department_name}</span>
+                        : <span style={{ color: 'var(--b24-text-faint)', fontStyle: 'italic', fontSize: 12 }}>—</span>
+                      }
+                    </td>
                     <td style={{ color: 'var(--b24-text-muted)' }}>{agent.team}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--b24-text-muted)' }}>
                       {agent.whatsapp_phone || <span style={{ color: 'var(--b24-text-faint)', fontStyle: 'italic' }}>—</span>}
@@ -190,7 +231,17 @@ const TeamManagement: React.FC = () => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      <input type="text" className="b24-input" placeholder="Search name or dept…" value={searchDept} onChange={e => setSearchDept(e.target.value)} />
+                      {departments.length > 0 && (
+                        <select
+                          className="b24-select"
+                          value={deptFilter}
+                          onChange={e => { setDeptFilter(e.target.value); setSearchDept(''); }}
+                        >
+                          <option value="">All departments</option>
+                          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      )}
+                      <input type="text" className="b24-input" placeholder="Search name…" value={searchDept} onChange={e => setSearchDept(e.target.value)} />
                       <select className="b24-select" value={form.bitrix_user_id} onChange={e => selectUser(e.target.value)}>
                         <option value="">— Choose a user —</option>
                         {Object.entries(filteredDepts).map(([dept, users]) => (

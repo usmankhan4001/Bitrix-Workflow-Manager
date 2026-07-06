@@ -11,11 +11,13 @@ const SETTING_DEFAULTS: Record<string, string> = {
   ONCLOUD_OVERDUE_TEMPLATE: 'lead_overdue',
   ONCLOUD_TEMPLATE_LANGUAGE: 'en',
   SLA_HOURS: '24',
-  // Gap 3 — source exclusion
-  EXCLUDED_SOURCES: '[]',             // JSON array of SOURCE_ID codes to skip, e.g. '["UC_NNO79X"]'
-  // Gap 2 — escalation
-  WORKFLOW_MANAGER_ID: '1',           // Bitrix24 user ID who receives escalation tasks
-  MAX_TASKS_BEFORE_ESCALATION: '2',   // if lead already has this many tasks, escalate
+  EXCLUDED_SOURCES: '[]',
+  WORKFLOW_MANAGER_ID: '1',
+  MAX_TASKS_BEFORE_ESCALATION: '2',
+  WORKFLOW_ENABLED: 'true',            // master on/off switch — set to 'false' to pause all lead assignment
+  // Assignment scope
+  LEAD_ASSIGNMENT_TEAM: 'B2C',        // rotation team that receives incoming leads
+  ELIGIBLE_DEPT_IDS: '[]',            // JSON array of Bitrix24 dept IDs eligible for assignment; empty = no restriction
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -96,13 +98,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return this.getAgents();
   }
 
-  async addAgent(data: { bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string }) {
+  async addAgent(data: { bitrix_user_id: string; name: string; team: string; whatsapp_phone?: string; department_id?: string; department_name?: string }) {
     return this.agent.create({
-      data: { ...data, whatsapp_phone: data.whatsapp_phone ?? null, is_active: true },
+      data: {
+        ...data,
+        whatsapp_phone: data.whatsapp_phone ?? null,
+        department_id: data.department_id ?? null,
+        department_name: data.department_name ?? null,
+        is_active: true,
+      },
     });
   }
 
-  async updateAgent(id: string, data: { name?: string; team?: string; whatsapp_phone?: string }) {
+  async updateAgent(id: string, data: { name?: string; team?: string; whatsapp_phone?: string; department_id?: string; department_name?: string }) {
     return this.agent.update({ where: { id }, data });
   }
 
@@ -407,6 +415,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   ): Promise<{ success: boolean; agent?: any; taskId?: string | null; skipped?: boolean; queued?: boolean; message?: string }> {
     const settings = await this.getSettings();
 
+    if (settings.WORKFLOW_ENABLED !== 'true') {
+      this.logger.log(`Lead #${leadId} skipped — workflow engine is paused`);
+      return { success: false, message: 'Workflow engine is paused' };
+    }
+
     // Gap 2: Queue leads arriving outside business hours if not forced
     if (!force && !this.isWithinBusinessHours(settings)) {
       this.logger.log(`Lead #${leadId} arrived outside business hours. Queueing in LateLead...`);
@@ -471,14 +484,21 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return { processed: 0, skipped: 0, failed: 0 };
     }
 
-    this.logger.log(`Cron: processing ${leads.length} late lead(s)`);
+    const settings = await this.getSettings();
+
+    if (settings.WORKFLOW_ENABLED !== 'true') {
+      this.logger.log('Cron: skipped — workflow engine is paused');
+      return { processed: 0, skipped: leads.length, failed: 0 };
+    }
+
+    const defaultTeam = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+    this.logger.log(`Cron: processing ${leads.length} late lead(s) → team "${defaultTeam}"`);
     const creds = this.getWebhookCreds();
     let processed = 0, skipped = 0, failed = 0;
 
     for (const lateLead of leads) {
       try {
-        // Default team — could be extended to store team per LateLead in the future
-        const result = await this.processLeadAssignment(lateLead.lead_id, 'Sales Executives', creds, true);
+        const result = await this.processLeadAssignment(lateLead.lead_id, defaultTeam, creds, true);
         if (result.skipped) skipped++;
         else if (result.success) processed++;
         else failed++;
@@ -684,7 +704,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
           lead_id: leadId,
           agent_id: agent?.id || 'manual-assignee',
           agent_name: agent?.name || `Bitrix User #${lead.assignedById}`,
-          team: agent?.team || 'Sales Executives',
+          team: agent?.team || 'unknown',
         },
       });
 

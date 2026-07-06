@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const API = () => import.meta.env.VITE_API_URL ?? '';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const TEAMS = ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 const Tip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
@@ -105,6 +106,7 @@ const EscalationDiagram: React.FC = () => (
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 interface BitrixUser { id: string; name: string; active: boolean; }
+interface BitrixDept { id: string; name: string; }
 
 const Settings: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -112,14 +114,16 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = useState<string | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [bitrixUsers, setBitrixUsers] = useState<BitrixUser[]>([]);
+  const [departments, setDepartments] = useState<BitrixDept[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {}),
-      fetch(`${API()}/api/bitrix/webhook-users`).then(r => r.ok ? r.json() : { users: [] }),
+      fetch(`${API()}/api/bitrix/webhook-users`).then(r => r.ok ? r.json() : { users: [], departments: [] }),
     ]).then(([s, u]) => {
       setSettings(s);
       setBitrixUsers((u.users || []).filter((u: BitrixUser) => u.active));
+      setDepartments(u.departments || []);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -142,7 +146,15 @@ const Settings: React.FC = () => {
     setSettings(s => ({ ...s, NOT_ALLOWED_DAYS: JSON.stringify(next) }));
   };
 
+  const eligibleDeptIds: string[] = (() => { try { return JSON.parse(settings.ELIGIBLE_DEPT_IDS || '[]'); } catch { return []; } })();
+  const toggleEligibleDept = (id: string) => {
+    const next = eligibleDeptIds.includes(id) ? eligibleDeptIds.filter(d => d !== id) : [...eligibleDeptIds, id];
+    setSettings(s => ({ ...s, ELIGIBLE_DEPT_IDS: JSON.stringify(next) }));
+  };
+
   const managerName = bitrixUsers.find(u => u.id === settings.WORKFLOW_MANAGER_ID)?.name;
+  const workflowEnabled = settings.WORKFLOW_ENABLED !== 'false';
+  const toggleEngine = () => save('WORKFLOW_ENABLED', workflowEnabled ? 'false' : 'true');
 
   if (loading) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--b24-bg)' }}>
@@ -154,7 +166,50 @@ const Settings: React.FC = () => {
     <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div className="b24-navbar">
         <h1 style={{ fontSize: 16, fontWeight: 700, color: 'var(--b24-text)' }}>Settings</h1>
+        <button
+          onClick={toggleEngine}
+          disabled={saving === 'WORKFLOW_ENABLED'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '5px 14px 5px 10px', borderRadius: 20, border: 'none', cursor: 'pointer',
+            background: workflowEnabled ? 'var(--b24-green-dim)' : 'rgba(180,40,30,0.10)',
+            color: workflowEnabled ? 'var(--b24-green)' : 'var(--b24-red)',
+            fontWeight: 600, fontSize: 12, transition: 'background 0.2s, color 0.2s',
+            outline: `1px solid ${workflowEnabled ? 'var(--b24-green-ring)' : 'rgba(180,40,30,0.25)'}`,
+          }}
+        >
+          {/* Toggle knob */}
+          <span style={{
+            width: 34, height: 18, borderRadius: 9, position: 'relative', flexShrink: 0,
+            background: workflowEnabled ? 'var(--b24-green)' : '#ccc',
+            transition: 'background 0.2s',
+            display: 'inline-block',
+          }}>
+            <span style={{
+              position: 'absolute', top: 2,
+              left: workflowEnabled ? 18 : 2,
+              width: 14, height: 14, borderRadius: '50%',
+              background: '#fff', transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }} />
+          </span>
+          {saving === 'WORKFLOW_ENABLED' ? 'Saving…' : workflowEnabled ? 'Engine Running' : 'Engine Paused'}
+        </button>
       </div>
+
+      {!workflowEnabled && (
+        <div style={{
+          background: 'rgba(180,40,30,0.08)', borderBottom: '1px solid rgba(180,40,30,0.2)',
+          padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--b24-red)', flexShrink: 0 }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p style={{ fontSize: 13, color: 'var(--b24-red)', fontWeight: 500 }}>
+            Workflow engine is <strong>paused</strong> — no leads are being assigned and the cron job is inactive. Toggle "Engine Running" above to resume.
+          </p>
+        </div>
+      )}
       <div style={{ flex: 1, overflowY: 'auto' }}>
 
       {toast && (
@@ -222,6 +277,73 @@ const Settings: React.FC = () => {
 
         {/* RIGHT column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Assignment Scope */}
+        <Section
+          icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+          title="Assignment Scope"
+          desc="Which team and departments receive incoming leads"
+        >
+          <FormRow
+            label="Lead Assignment Team"
+            desc={`Incoming leads go to agents tagged with this team name. Currently: "${settings.LEAD_ASSIGNMENT_TEAM || 'B2C'}"`}
+            tip="When a new lead arrives (from Bitrix24 automation or the late-lead queue), it is assigned to the next active agent in THIS team's rotation. Make sure your agents on the Team page have this exact team name."
+            right={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select
+                  className="b24-select"
+                  style={{ width: 160 }}
+                  value={settings.LEAD_ASSIGNMENT_TEAM || 'B2C'}
+                  onChange={e => setSettings(s => ({ ...s, LEAD_ASSIGNMENT_TEAM: e.target.value }))}
+                >
+                  {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <SaveBtn onClick={() => save('LEAD_ASSIGNMENT_TEAM', settings.LEAD_ASSIGNMENT_TEAM || 'B2C')} saving={saving === 'LEAD_ASSIGNMENT_TEAM'} />
+              </div>
+            }
+          />
+
+          <div style={{ padding: '14px 0 6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--b24-text)', marginBottom: 2 }}>
+                  Eligible Departments
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--b24-text-muted)' }}>
+                  {eligibleDeptIds.length === 0
+                    ? 'All Bitrix24 departments appear in the user picker'
+                    : `${eligibleDeptIds.length} department${eligibleDeptIds.length > 1 ? 's' : ''} selected — user picker is pre-filtered to these`}
+                </p>
+              </div>
+              <SaveBtn onClick={() => save('ELIGIBLE_DEPT_IDS', settings.ELIGIBLE_DEPT_IDS || '[]')} saving={saving === 'ELIGIBLE_DEPT_IDS'} />
+            </div>
+            {departments.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--b24-text-faint)', fontStyle: 'italic' }}>No departments loaded — check BITRIX_WEBHOOK_TOKEN.</p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {departments.map(d => {
+                  const checked = eligibleDeptIds.includes(d.id);
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => toggleEligibleDept(d.id)}
+                      className={`b24-btn ${checked ? 'b24-btn-primary' : 'b24-btn-secondary'}`}
+                      style={{ height: 28, fontSize: 12, padding: '0 12px', gap: 5, display: 'flex', alignItems: 'center' }}
+                    >
+                      {checked && (
+                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.121-4.121a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z" clipRule="evenodd"/>
+                        </svg>
+                      )}
+                      {d.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Section>
 
         {/* Escalation Manager */}
         <Section

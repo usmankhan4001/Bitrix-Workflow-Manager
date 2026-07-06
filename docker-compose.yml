@@ -62,10 +62,14 @@ services:
       WHATSAPP_API_KEY: ${WAHA_API_KEY}
       # Auto-start the session named "default" on boot.
       WHATSAPP_START_SESSION: ${WAHA_SESSION:-default}
-      # Persist auth so you don't re-scan the QR on every restart.
-      WHATSAPP_FILES_FOLDER: /app/.sessions
+      # Where WAHA keeps its session store (default; set explicitly for clarity).
+      WAHA_LOCAL_STORE_BASE_DIR: /app/.sessions
     volumes:
-      - waha_sessions:/app/.sessions
+      # IMPORTANT: a local bind mount, NOT a Docker named volume. WAHA's SQLite
+      # store uses WAL journal mode, which fails with "SQLITE_IOERR: disk I/O
+      # error" on a named volume on this host. A bind mount to the host's local
+      # disk (Dokploy ../files) supports the file locking WAL needs.
+      - ../files/waha:/app/.sessions
     ports:
       # Exposed so you can reach the WAHA dashboard (QR scan) from your browser.
       - "${WAHA_PORT:-3001}:3000"
@@ -92,4 +96,3 @@ networks:
 
 volumes:
   postgres_data:
-  waha_sessions:

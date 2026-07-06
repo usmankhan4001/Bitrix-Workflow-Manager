@@ -392,6 +392,22 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
+  // Add a user as an observer (auditor) on an existing Bitrix task.
+  async addTaskAuditor(taskId: string, userId: string, creds: BitrixCreds): Promise<boolean> {
+    try {
+      const body = new URLSearchParams();
+      body.append('taskId', taskId);
+      body.append('fields[AUDITORS][0]', userId);
+      if (creds.accessToken) body.append('auth', creds.accessToken);
+      const res = await fetch(this.bitrixUrl('tasks.task.update', creds), { method: 'POST', body });
+      const data = (await res.json()) as any;
+      return !data.error;
+    } catch (err) {
+      this.logger.warn(`addTaskAuditor failed for task ${taskId}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
   // ─── Round-Robin Pick ──────────────────────────────────────────────────────
 
   async pickNextAgent(team: string): Promise<any | null> {
@@ -577,7 +593,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       };
 
       this.logger.log(`Manager reassigned lead #${leadId} → ${targetAgent.name}. Restarting workflow.`);
-      await this.processLeadAssignment(String(leadId), team, creds, true, targetAgent);
+      const result = await this.processLeadAssignment(String(leadId), team, creds, true, targetAgent);
+
+      // Keep the Escalation Manager in the loop on escalated leads: add them as an
+      // observer on the rep's new follow-up task.
+      if (result?.taskId) {
+        await this.addTaskAuditor(String(result.taskId), managerId, creds);
+        this.logger.log(`Added manager (${managerId}) as observer on task ${result.taskId}`);
+      }
+
       return { action: 'restarted', detail: `Workflow restarted for ${targetAgent.name}` };
     }
 

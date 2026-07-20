@@ -92,12 +92,10 @@ export class WorkflowController {
       return { success: false, message: 'No lead_id provided in body or query' };
     }
 
-    // Use body/query team if provided, otherwise read from settings so it's configurable
-    let team = body.team || query.team;
-    if (!team) {
-      const settings = await this.workflowService.getSettings();
-      team = settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
-    }
+    // An explicit team (body/query) pins the assignment to that rotation.
+    // Otherwise the service resolves it per-lead from SOURCE_TEAM_MAP /
+    // LEAD_ASSIGNMENT_TEAM once it knows the lead's source.
+    const team: string | undefined = body.team || query.team || undefined;
 
     const force = body.force === true || body.force === 'true' || query.force === 'true';
 

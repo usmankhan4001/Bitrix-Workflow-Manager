@@ -30,6 +30,10 @@ model AssignmentLog {
   team         String
   assigned_at  DateTime @default(now())
   wa_notified  Boolean  @default(false)
+
+  // Backstop against duplicate assignment rows for the same lead+agent pair.
+  // Legitimate reassignment to a *different* agent still gets its own row.
+  @@unique([lead_id, agent_id])
 }
 
 // Agents who completed a task and are first in line for the next overdue lead
@@ -55,4 +59,14 @@ model LateLead {
   created_at   DateTime  @default(now())
   processed    Boolean   @default(false)
   processed_at DateTime?
+}
+
+// Last Bitrix ASSIGNED_BY_ID we actually observed for a lead. Lets
+// handleLeadChangeWebhook tell "the owner genuinely just changed" apart from
+// "the manager's account merely touched an already-correctly-assigned lead",
+// which used to be misread as a fresh reassignment on every touch.
+model LeadOwner {
+  lead_id        String   @id
+  assigned_by_id String
+  updated_at     DateTime @updatedAt
 }

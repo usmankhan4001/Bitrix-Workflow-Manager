@@ -176,6 +176,13 @@ const Settings: React.FC = () => {
     setSettings(s => ({ ...s, ALLOWED_SOURCES: JSON.stringify(next) }));
   };
 
+  const sourceTeamMap: Record<string, string> = (() => { try { return JSON.parse(settings.SOURCE_TEAM_MAP || '{}'); } catch { return {}; } })();
+  const setSourceTeam = (sourceId: string, team: string) => {
+    const next = { ...sourceTeamMap };
+    if (team) next[sourceId] = team; else delete next[sourceId];
+    setSettings(s => ({ ...s, SOURCE_TEAM_MAP: JSON.stringify(next) }));
+  };
+
   const managerName = bitrixUsers.find(u => u.id === settings.WORKFLOW_MANAGER_ID)?.name;
   const workflowEnabled = settings.WORKFLOW_ENABLED !== 'false';
   const toggleEngine = () => save('WORKFLOW_ENABLED', workflowEnabled ? 'false' : 'true');
@@ -300,9 +307,9 @@ const Settings: React.FC = () => {
             desc="Which team, departments and lead sources receive incoming leads"
           >
             <FormRow
-              label="Lead Assignment Team"
-              desc={`Incoming leads go to agents tagged with this team name. Currently: "${settings.LEAD_ASSIGNMENT_TEAM || 'B2C'}"`}
-              tip="When a new lead arrives (from Bitrix24 automation or the late-lead queue), it is assigned to the next active agent in THIS team's rotation. Make sure your agents on the Team page have this exact team name."
+              label="Default Team"
+              desc={`Used when a lead's source isn't mapped below. Currently: "${settings.LEAD_ASSIGNMENT_TEAM || 'B2C'}"`}
+              tip="Every lead is routed by its source using the mapping below. A source with no mapping falls back to this team's rotation. Make sure your agents on the Team page have this exact team name."
               right={
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <select
@@ -317,6 +324,43 @@ const Settings: React.FC = () => {
                 </div>
               }
             />
+
+            {/* Source → Team Routing */}
+            <div style={{ padding: '14px 0 6px', borderBottom: '1px solid var(--b24-divider-light)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--b24-text)', marginBottom: 2, margin: 0 }}>
+                    Route by Source
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0 }}>
+                    Send leads from a specific source straight to a team. One shared Bitrix24 webhook handles every source — this is what keeps them from mixing into the wrong team's rotation. Sources left on "Default" use the Default Team above.
+                  </p>
+                </div>
+                <SaveBtn onClick={() => save('SOURCE_TEAM_MAP', settings.SOURCE_TEAM_MAP || '{}')} saving={saving === 'SOURCE_TEAM_MAP'} />
+              </div>
+              {bitrixSources.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--b24-text-faint)', fontStyle: 'italic', margin: 0 }}>No lead sources loaded — check Bitrix24 credentials.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {bitrixSources.map(src => (
+                    <div key={src.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '5px 0' }}>
+                      <span style={{ fontSize: 12, color: 'var(--b24-text)' }}>
+                        {src.name} <span style={{ fontSize: 10, opacity: 0.6, fontFamily: 'monospace' }}>({src.id})</span>
+                      </span>
+                      <select
+                        className="b24-select"
+                        style={{ width: 170 }}
+                        value={sourceTeamMap[src.id] || ''}
+                        onChange={e => setSourceTeam(src.id, e.target.value)}
+                      >
+                        <option value="">— Default team —</option>
+                        {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Eligible Departments */}
             <div style={{ padding: '14px 0 6px', borderBottom: '1px solid var(--b24-divider-light)' }}>

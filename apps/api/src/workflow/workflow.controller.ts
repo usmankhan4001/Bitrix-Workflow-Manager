@@ -63,6 +63,19 @@ export class WorkflowController {
   @Get('assigned-today')
   getAssignedTodayCount() { return this.workflowService.getAssignedTodayCount(); }
 
+  // ─── Duplicate Review Queue ─────────────────────────────────────────────────
+
+  @Get('duplicates')
+  getDuplicates(@Query('resolved') resolved?: string) {
+    const parsed = resolved === 'true' ? true : resolved === 'false' ? false : undefined;
+    return this.workflowService.getDuplicates(parsed);
+  }
+
+  @Put('duplicates/:id/resolve')
+  resolveDuplicate(@Param('id') id: string) {
+    return this.workflowService.resolveDuplicate(id);
+  }
+
   // ─── Workflow Status (dashboard snapshot) ──────────────────────────────────
 
   @Get('status')
@@ -94,8 +107,12 @@ export class WorkflowController {
 
     // An explicit team (body/query) pins the assignment to that rotation.
     // Otherwise the service resolves it per-lead from SOURCE_TEAM_MAP /
-    // LEAD_ASSIGNMENT_TEAM once it knows the lead's source.
-    const team: string | undefined = body.team || query.team || undefined;
+    // LEAD_ASSIGNMENT_TEAM once it knows the lead's source. Trimmed since
+    // this is free text from whatever calls this endpoint (e.g. a Bitrix
+    // automation rule URL param) — stray whitespace would otherwise silently
+    // match zero agents instead of the intended team.
+    const rawTeam = body.team || query.team;
+    const team: string | undefined = rawTeam ? String(rawTeam).trim() || undefined : undefined;
 
     const force = body.force === true || body.force === 'true' || query.force === 'true';
 

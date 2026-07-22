@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 
-const API = () => import.meta.env.VITE_API_URL ?? '';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
@@ -120,10 +120,10 @@ const Settings: React.FC = () => {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API()}/api/workflow/settings`).then(r => r.ok ? r.json() : {} as Record<string, string>),
-      fetch(`${API()}/api/bitrix/webhook-users`).then(r => r.ok ? r.json() : { users: [], departments: [] }),
-      fetch(`${API()}/api/workflow/teams`).then(r => r.ok ? r.json() : []),
-      fetch(`${API()}/api/bitrix/webhook-sources`).then(r => r.ok ? r.json() : { sources: [] }),
+      apiFetch('/api/workflow/settings').then(r => r.ok ? r.json() : {} as Record<string, string>),
+      apiFetch('/api/bitrix/webhook-users').then(r => r.ok ? r.json() : { users: [], departments: [] }),
+      apiFetch('/api/workflow/teams').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/bitrix/webhook-sources').then(r => r.ok ? r.json() : { sources: [] }),
     ]).then(([sData, u, t, src]) => {
       const s = sData as Record<string, string>;
       const activeTeams = t && t.length > 0 ? t : ['B2C', 'Sales Executives', 'Telly Sales', 'B2B'];
@@ -143,7 +143,7 @@ const Settings: React.FC = () => {
   const save = async (key: string, value: string) => {
     setSaving(key);
     try {
-      await fetch(`${API()}/api/workflow/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
+      await apiFetch('/api/workflow/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
       setSettings(s => ({ ...s, [key]: value }));
       showToast('success', 'Saved successfully');
     } catch (e) {
@@ -333,7 +333,7 @@ const Settings: React.FC = () => {
                     Route by Source
                   </p>
                   <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0 }}>
-                    Send leads from a specific source straight to a team. One shared Bitrix24 webhook handles every source — this is what keeps them from mixing into the wrong team's rotation. Sources left on "Default" use the Default Team above.
+                    Send leads from a specific source straight to a team. One shared Bitrix24 webhook handles every source — this is what keeps them from mixing into the wrong team's rotation. Sources left on "Default" use the Default Team above. Mapping a source here always lets it through, even if it's also excluded below in Allowed Lead Sources.
                   </p>
                 </div>
                 <SaveBtn onClick={() => save('SOURCE_TEAM_MAP', settings.SOURCE_TEAM_MAP || '{}')} saving={saving === 'SOURCE_TEAM_MAP'} />

@@ -68,3 +68,18 @@ model LeadOwner {
   assigned_by_id String
   updated_at     DateTime @updatedAt
 }
+
+// Leads flagged by the duplicate guardrail. Left unassigned in Bitrix on
+// purpose — no agent, no manager, no task, no WhatsApp — for a human to
+// review from the Duplicates page instead of being auto-routed anywhere.
+model DuplicateLead {
+  id               String    @id @default(uuid())
+  lead_id          String    @unique
+  lead_name        String
+  team             String
+  matched_lead_ids String    // JSON array of the other lead ID(s) it matched
+  matched_fields   String    // JSON array of which fields matched (phone, email, name+recent, ...)
+  detected_at      DateTime  @default(now())
+  resolved         Boolean   @default(false)
+  resolved_at      DateTime?
+}

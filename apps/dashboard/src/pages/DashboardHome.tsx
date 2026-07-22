@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const API = () => import.meta.env.VITE_API_URL || '';
+import { apiFetch } from '../lib/api';
 
 interface WorkflowStatus {
   engineEnabled: boolean;
@@ -26,8 +25,7 @@ const DashboardHome: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const base = API();
-      const resStatus = await fetch(`${base}/api/workflow/status`);
+      const resStatus = await apiFetch('/api/workflow/status');
       if (resStatus.ok) setStatus(await resStatus.json());
     } catch (e) {
       console.error('Error fetching dashboard data:', e);
@@ -40,8 +38,7 @@ const DashboardHome: React.FC = () => {
     if (!window.confirm("Are you sure you want to clear the queue without assigning the leads?")) return;
     setClearing(true);
     try {
-      const base = API();
-      const res = await fetch(`${base}/api/workflow/clear-queue`, {
+      const res = await apiFetch('/api/workflow/clear-queue', {
         method: 'POST',
       });
       if (res.ok) {

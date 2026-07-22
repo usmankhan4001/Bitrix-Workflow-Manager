@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getStoredAuth } from '../lib/bx24';
-
-const API = () => import.meta.env.VITE_API_URL ?? '';
+import { apiFetch } from '../lib/api';
 
 interface LogEntry {
   id: string;
@@ -39,10 +38,9 @@ const AssignmentLog: React.FC = () => {
   const fetchLog = async () => {
     setLoading(true);
     try {
-      const base = API();
       const [resLog, resTeams] = await Promise.all([
-        fetch(`${base}/api/workflow/assignment-log?limit=${limit}`),
-        fetch(`${base}/api/workflow/teams`),
+        apiFetch(`/api/workflow/assignment-log?limit=${limit}`),
+        apiFetch('/api/workflow/teams'),
       ]);
       if (resLog.ok) setEntries(await resLog.json());
       if (resTeams.ok) {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-const API = () => import.meta.env.VITE_API_URL ?? '';
+import { apiFetch } from '../lib/api';
 
 const Tip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
   const [show, setShow] = useState(false);
@@ -48,7 +47,7 @@ const Notifications: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   useEffect(() => {
-    fetch(`${API()}/api/workflow/settings`)
+    apiFetch('/api/workflow/settings')
       .then(r => r.ok ? r.json() : {})
       .then(s => setSettings(s))
       .catch(console.error)
@@ -57,7 +56,7 @@ const Notifications: React.FC = () => {
 
   const save = async (key: string, value: string) => {
     try {
-      await fetch(`${API()}/api/workflow/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
+      await apiFetch('/api/workflow/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
       setSettings(s => ({ ...s, [key]: value }));
       showToast('success', 'Saved successfully');
     } catch (e) {
@@ -74,7 +73,7 @@ const Notifications: React.FC = () => {
   const testConn = async () => {
     setTesting(true); setTestResult(null);
     try {
-      const r = await fetch(`${API()}/api/workflow/whatsapp/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: testPhone }) });
+      const r = await apiFetch('/api/workflow/whatsapp/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: testPhone }) });
       setTestResult(await r.json());
     } catch (e) {
       setTestResult({ success: false, message: String(e) });

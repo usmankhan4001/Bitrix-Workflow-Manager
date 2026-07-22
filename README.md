@@ -104,11 +104,18 @@ FRONTEND_URL="http://localhost:5173"
 
 # OnCloud WhatsApp API
 ONCLOUD_API_TOKEN=your_oncloud_token
+
+# Optional but recommended: locks down the entire API with a shared secret.
+# Leave unset to run without auth (e.g. local dev). See section 6 for how
+# this key needs to be added to the Bitrix webhook URLs once set.
+WORKFLOW_API_KEY=
 ```
 
 Create a `.env` file in `apps/dashboard/.env`:
 ```env
 VITE_API_URL="http://localhost:3000"
+# Must match the API's WORKFLOW_API_KEY if that's set — leave both unset for local dev.
+VITE_API_KEY=
 ```
 
 ### 2. Run Database Migrations
@@ -172,3 +179,5 @@ To connect your Bitrix24 portal with the deployed server, configure the followin
     *   **Handler URL**: `https://your-domain.com/api/workflow/webhook/task-comment`
 3.  **Lead Reassignment Tracking** (`ONCRMLEADUPDATE`):
     *   **Handler URL**: `https://your-domain.com/api/workflow/webhook/lead-change`
+
+If `WORKFLOW_API_KEY` is set, append `?api_key=your_key` to every Handler URL above (e.g. `https://your-domain.com/api/workflow/assign-lead?api_key=your_key`) — otherwise Bitrix's calls will be rejected with 403.

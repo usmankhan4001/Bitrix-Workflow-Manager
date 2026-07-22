@@ -8,8 +8,7 @@ import {
   useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-const API = () => import.meta.env.VITE_API_URL ?? '';
+import { apiFetch } from '../lib/api';
 
 interface Agent {
   id: string; bitrix_user_id: string; name: string;
@@ -187,7 +186,7 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[]; teams: st
   }, [teams]);
 
   useEffect(() => {
-    fetch(`${API()}/api/bitrix/webhook-users`)
+    apiFetch('/api/bitrix/webhook-users')
       .then(async r => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
@@ -232,7 +231,7 @@ const AddPanel: React.FC<{ onAdded: () => void; existingIds: string[]; teams: st
     if (!selected || !selectedUser) return;
     setSubmitting(true);
     try {
-      await fetch(`${API()}/api/workflow/agents`, {
+      await apiFetch('/api/workflow/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -354,10 +353,9 @@ const Assignment: React.FC = () => {
   const fetchAgentsAndTeams = async () => {
     setLoading(true);
     try {
-      const base = API();
       const [resAgents, resTeams] = await Promise.all([
-        fetch(`${base}/api/workflow/agents`),
-        fetch(`${base}/api/workflow/teams`),
+        apiFetch('/api/workflow/agents'),
+        apiFetch('/api/workflow/teams'),
       ]);
 
       let loadedAgents: Agent[] = [];
@@ -403,7 +401,7 @@ const Assignment: React.FC = () => {
     const reordered = arrayMove(agents, oldIndex, newIndex);
     setAgents(reordered);
     try {
-      await fetch(`${API()}/api/workflow/agents/reorder`, {
+      await apiFetch('/api/workflow/agents/reorder', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderedIds: reordered.map(a => a.id) }),
       });
@@ -413,7 +411,7 @@ const Assignment: React.FC = () => {
   const toggleActive = async (id: string, cur: boolean) => {
     setSaving(id + '_toggle');
     try {
-      await fetch(`${API()}/api/workflow/agents/${id}/active`, {
+      await apiFetch(`/api/workflow/agents/${id}/active`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_active: !cur }),
       });
@@ -424,7 +422,7 @@ const Assignment: React.FC = () => {
 
   const deleteAgent = async (id: string, name: string) => {
     if (!confirm(`Remove ${name} from the rotation?`)) return;
-    await fetch(`${API()}/api/workflow/agents/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/workflow/agents/${id}`, { method: 'DELETE' });
     setAgents(prev => prev.filter(a => a.id !== id));
   };
 

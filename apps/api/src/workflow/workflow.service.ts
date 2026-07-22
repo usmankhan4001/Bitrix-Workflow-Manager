@@ -243,6 +243,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // ─── Source allow-list ─────────────────────────────────────────────────────
 
   isSourceAllowed(sourceId: string, settings: Record<string, string>): boolean {
+    // A source explicitly mapped in SOURCE_TEAM_MAP is a deliberate routing
+    // decision — a stronger, more specific signal than the coarser
+    // ALLOWED_SOURCES list, so it can't be silently dropped by it.
+    if (sourceId) {
+      let map: Record<string, string> = {};
+      try { map = JSON.parse(settings.SOURCE_TEAM_MAP || '{}'); } catch {}
+      if (Object.keys(map).some((src) => src.toUpperCase() === sourceId.toUpperCase())) return true;
+    }
+
     const allowedRaw = settings.ALLOWED_SOURCES || '[]';
     let allowed: string[] = [];
     try { allowed = JSON.parse(allowedRaw); } catch { return true; }
@@ -263,9 +272,9 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     try { map = JSON.parse(settings.SOURCE_TEAM_MAP || '{}'); } catch {}
     if (sourceId) {
       const hit = Object.entries(map).find(([src]) => src.toUpperCase() === sourceId.toUpperCase());
-      if (hit) return hit[1];
+      if (hit) return hit[1].trim();
     }
-    return settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+    return (settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
   }
 
   // ─── Bitrix24: Source labels (live, cached) ────────────────────────────────
@@ -363,11 +372,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   // ─── Duplicate detection ───────────────────────────────────────────────────
   // The same customer often enters Bitrix as several leads from different
-  // sources (e.g. Website + CRM form). A phone or email match — Bitrix's own
-  // duplicate index — is a strong enough signal on its own. A combined
-  // name+source match (e.g. the same form resubmitted with a mistyped phone
-  // number) is a weaker pair of signals but still reliable together, so it's
-  // treated the same way. Either case routes to the Escalation Manager
+  // sources (e.g. Website + CRM form), sometimes seconds apart from the same
+  // form submission. Bitrix's own crm.duplicate.findbycomm only searches
+  // phone/email stored directly on the Lead entity — confirmed against
+  // production data that this portal's web-sourced leads routinely keep that
+  // data on a linked Contact instead, which the Lead-level index can't see —
+  // so we also check the Contact-level index and map back to its lead(s).
+  // A same-name lead created within a short recency window is checked too,
+  // since that's the only remaining signal once a lead has neither Lead- nor
+  // Contact-level phone/email. Any of these routes to the Escalation Manager
   // instead of round-robining a second rep to the same customer.
 
   private normalizeName(name: string): string {
@@ -400,43 +413,85 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
-  // Recent leads sharing the same source (bounded window — avoids scanning an
-  // entire high-volume channel), filtered to ones whose display name also
-  // matches. Catches same-source duplicates whose phone/email don't exactly
-  // match Bitrix's own index.
-  private async findLeadsByNameAndSource(
+  // crm.duplicate.findbycomm with entity_type=LEAD only searches phone/email
+  // values stored directly on the Lead entity. Confirmed against production
+  // data (2026-07-22): this portal's web-sourced leads routinely arrive with
+  // no phone/email on the Lead itself — Bitrix links a Contact record and the
+  // communication data lives there instead — so findDuplicateLeadIdsByType
+  // above silently misses these. Searching entity_type=CONTACT finds the
+  // matching contact(s), which we then map back to whatever lead(s) they're
+  // linked to.
+  private async findDuplicateLeadIdsViaContact(
+    type: 'PHONE' | 'EMAIL',
+    leadId: string,
+    value: string,
+    creds: BitrixCreds,
+  ): Promise<string[]> {
+    if (!value) return [];
+    try {
+      const sep = this.bitrixUrl('crm.duplicate.findbycomm', creds).includes('?') ? '&' : '?';
+      const url = `${this.bitrixUrl('crm.duplicate.findbycomm', creds)}${sep}type=${type}&entity_type=CONTACT&values[]=${encodeURIComponent(value)}`;
+      const res = await fetch(url);
+      const data = (await res.json()) as any;
+      const contactIds: any[] = data.result?.CONTACT || [];
+      if (contactIds.length === 0) return [];
+
+      const params = new URLSearchParams();
+      contactIds.forEach((id: any) => params.append('filter[CONTACT_ID][]', String(id)));
+      params.append('select[]', 'ID');
+      const sep2 = this.bitrixUrl('crm.lead.list', creds).includes('?') ? '&' : '?';
+      const res2 = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep2}${params.toString()}`);
+      const data2 = (await res2.json()) as any;
+      const leadIds: any[] = data2.result || [];
+      return leadIds.map((r: any) => String(r.ID)).filter((id) => id !== String(leadId));
+    } catch (err) {
+      this.logger.warn(`findDuplicateLeadIdsViaContact (${type}) failed for #${leadId}: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  // Recent leads (any source, no source filter — confirmed against production
+  // data that the same submission can double-post under two different
+  // sources, e.g. "Website" + "CRM form", seconds apart) whose display name
+  // matches and which were created within the time window. Recency is what
+  // makes a bare name match trustworthy instead of a coincidental namesake.
+  private async findRecentLeadsByName(
     leadId: string,
     name: string,
-    sourceId: string,
     creds: BitrixCreds,
+    windowMinutes = 30,
     limit = 50,
   ): Promise<string[]> {
     const normalizedTarget = this.normalizeName(name);
-    if (!normalizedTarget || !sourceId) return [];
+    if (!normalizedTarget) return [];
     try {
       const params = new URLSearchParams();
-      params.append('filter[SOURCE_ID]', sourceId);
       params.append('order[ID]', 'DESC');
       params.append('select[]', 'ID');
       params.append('select[]', 'NAME');
       params.append('select[]', 'LAST_NAME');
       params.append('select[]', 'COMPANY_TITLE');
       params.append('select[]', 'TITLE');
+      params.append('select[]', 'DATE_CREATE');
       const sep = this.bitrixUrl('crm.lead.list', creds).includes('?') ? '&' : '?';
       const res = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep}${params.toString()}`);
       const data = (await res.json()) as any;
       const rows: any[] = (data.result || []).slice(0, limit);
+      const cutoff = Date.now() - windowMinutes * 60 * 1000;
       return rows
-        .filter((r) => String(r.ID) !== String(leadId) && this.normalizeName(this.buildDisplayName(r)) === normalizedTarget)
+        .filter((r) => String(r.ID) !== String(leadId))
+        .filter((r) => this.normalizeName(this.buildDisplayName(r)) === normalizedTarget)
+        .filter((r) => { const t = new Date(r.DATE_CREATE).getTime(); return !isNaN(t) && t >= cutoff; })
         .map((r) => String(r.ID));
     } catch (err) {
-      this.logger.warn(`findLeadsByNameAndSource failed for #${leadId}: ${(err as Error).message}`);
+      this.logger.warn(`findRecentLeadsByName failed for #${leadId}: ${(err as Error).message}`);
       return [];
     }
   }
 
-  // Combines phone/email (sufficient alone) with a name+source pair match
-  // (sufficient together) into one duplicate check.
+  // Combines phone/email (Lead-level and Contact-level index, either
+  // sufficient alone) with a recent name match (sufficient on its own within
+  // the time window — see findRecentLeadsByName) into one duplicate check.
   async findGuardrailDuplicates(
     leadId: string,
     lead: LeadDetails,
@@ -450,14 +505,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       }
     };
 
-    const [phoneIds, emailIds, nameSourceIds] = await Promise.all([
+    const [phoneIds, emailIds, phoneViaContact, emailViaContact, recentNameIds] = await Promise.all([
       this.findDuplicateLeadIdsByType('PHONE', leadId, lead.phone || '', creds),
       this.findDuplicateLeadIdsByType('EMAIL', leadId, lead.email || '', creds),
-      this.findLeadsByNameAndSource(leadId, lead.name, lead.sourceId, creds),
+      this.findDuplicateLeadIdsViaContact('PHONE', leadId, lead.phone || '', creds),
+      this.findDuplicateLeadIdsViaContact('EMAIL', leadId, lead.email || '', creds),
+      this.findRecentLeadsByName(leadId, lead.name, creds),
     ]);
     addMatches(phoneIds, 'phone');
     addMatches(emailIds, 'email');
-    addMatches(nameSourceIds, 'name', 'source');
+    addMatches(phoneViaContact, 'phone (via contact)');
+    addMatches(emailViaContact, 'email (via contact)');
+    addMatches(recentNameIds, 'name+recent');
 
     return [...matched.entries()].map(([id, fields]) => ({ leadId: id, matchedFields: [...fields].sort() }));
   }
@@ -603,6 +662,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         }
       }
 
+      // Already flagged as a duplicate on a previous pass (e.g. a retried
+      // webhook delivery) — don't re-run the guardrail's several Bitrix API
+      // calls, and don't let a forced/manager path assign it out from under
+      // the duplicate flag either.
+      if (!force) {
+        const existingFlag = await this.duplicateLead.findUnique({ where: { lead_id: cleanLeadId } });
+        if (existingFlag) {
+          const matches = JSON.parse(existingFlag.matched_lead_ids || '[]').join(', ');
+          return { success: true, skipped: true, message: `Lead flagged as duplicate of ${matches} — left unassigned` };
+        }
+      }
+
       // Fetch lead details up front — needed for routing and escalation messaging.
       const lead = await this.fetchLeadDetails(cleanLeadId, creds);
 
@@ -617,7 +688,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // existing team). This is what lets one shared ONCRMLEADADD webhook route
       // every source to the right team instead of everything piling into a
       // single global team.
-      const resolvedTeam = team || this.resolveTeamForSource(lead.sourceId, settings);
+      const resolvedTeam = (team ? team.trim() : '') || this.resolveTeamForSource(lead.sourceId, settings);
 
       const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
 
@@ -635,12 +706,12 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, 'arrived outside business hours', settings, creds);
       }
 
-      // Duplicate guardrail (phone/email match, or a name+source pair match) → Manager.
+      // Duplicate guardrail — flagged, left unassigned, not sent to the
+      // manager either. A human reviews it from the Duplicates page.
       if (!force) {
         const duplicates = await this.findGuardrailDuplicates(cleanLeadId, lead, creds);
         if (duplicates.length > 0) {
-          const detail = duplicates.map((d) => `#${d.leadId} (${d.matchedFields.join('+')})`).join(', ');
-          return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, `duplicate of lead(s) ${detail}`, settings, creds);
+          return this.flagAsDuplicate(cleanLeadId, lead, resolvedTeam, duplicates);
         }
       }
 
@@ -711,6 +782,45 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return { success: true, agent: manager, taskId, message: reason };
   }
 
+  // Duplicate guardrail matched — left unassigned on purpose. No Bitrix
+  // mutation at all (no ASSIGNED_BY_ID change, no task, no WhatsApp); just
+  // recorded for a human to review from the Duplicates page.
+  private async flagAsDuplicate(
+    leadId: string,
+    lead: LeadDetails,
+    team: string,
+    duplicates: { leadId: string; matchedFields: string[] }[],
+  ): Promise<any> {
+    const matchedLeadIds = duplicates.map((d) => d.leadId);
+    const matchedFields = [...new Set(duplicates.flatMap((d) => d.matchedFields))];
+    this.logger.warn(`Lead #${leadId} ("${lead.name}") flagged as duplicate of ${matchedLeadIds.join(', ')} — left unassigned.`);
+    await this.duplicateLead.upsert({
+      where: { lead_id: leadId },
+      update: { matched_lead_ids: JSON.stringify(matchedLeadIds), matched_fields: JSON.stringify(matchedFields), team },
+      create: {
+        lead_id: leadId,
+        lead_name: lead.name,
+        team,
+        matched_lead_ids: JSON.stringify(matchedLeadIds),
+        matched_fields: JSON.stringify(matchedFields),
+      },
+    });
+    return { success: true, skipped: true, message: `Flagged as duplicate of ${matchedLeadIds.join(', ')} — left unassigned` };
+  }
+
+  // ─── Duplicate review queue ─────────────────────────────────────────────────
+
+  async getDuplicates(resolved?: boolean) {
+    return this.duplicateLead.findMany({
+      where: resolved === undefined ? {} : { resolved },
+      orderBy: { detected_at: 'desc' },
+    });
+  }
+
+  async resolveDuplicate(id: string) {
+    return this.duplicateLead.update({ where: { id }, data: { resolved: true, resolved_at: new Date() } });
+  }
+
   // ─── Manager reassignment → restart the workflow for the new rep ───────────
   // Fired by a Bitrix outbound webhook on lead update. When the Escalation Manager
   // changes the responsible person to someone else, we (re)start the follow-up
@@ -739,7 +849,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     // Only react when the Escalation Manager handed the lead to a different person.
     if (lead.modifyById === managerId && lead.assignedById && lead.assignedById !== managerId) {
       const repAgent = await this.agent.findFirst({ where: { bitrix_user_id: lead.assignedById } });
-      const team = repAgent?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C';
+      const team = (repAgent?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
       const targetAgent = repAgent || {
         id: 'manual-assignee', bitrix_user_id: lead.assignedById,
         name: `Bitrix User #${lead.assignedById}`, whatsapp_phone: null, team,

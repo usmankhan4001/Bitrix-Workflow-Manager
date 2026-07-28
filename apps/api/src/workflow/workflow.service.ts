@@ -489,9 +489,51 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
-  // Combines phone/email (Lead-level and Contact-level index, either
-  // sufficient alone) with a recent name match (sufficient on its own within
-  // the time window — see findRecentLeadsByName) into one duplicate check.
+  canonicalPhone(phone: string): string {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 7) return '';
+    return digits.slice(-10);
+  }
+
+  private async findLeadsByCanonicalPhone(
+    leadId: string,
+    targetCanonicalPhone: string,
+    creds: BitrixCreds,
+  ): Promise<string[]> {
+    if (!targetCanonicalPhone) return [];
+    try {
+      const params = new URLSearchParams();
+      params.append('order[ID]', 'DESC');
+      params.append('select[]', 'ID');
+      params.append('select[]', 'PHONE');
+      const sep = this.bitrixUrl('crm.lead.list', creds).includes('?') ? '&' : '?';
+      const res = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep}${params.toString()}`);
+      const data = (await res.json()) as any;
+      const rows: any[] = (data.result || []).slice(0, 100);
+
+      const matchedLeadIds: string[] = [];
+      for (const r of rows) {
+        const rId = String(r.ID);
+        if (rId === String(leadId)) continue;
+        const phones: any[] = Array.isArray(r.PHONE) ? r.PHONE : [];
+        for (const p of phones) {
+          const val = p?.VALUE || '';
+          if (this.canonicalPhone(val) === targetCanonicalPhone) {
+            matchedLeadIds.push(rId);
+            break;
+          }
+        }
+      }
+      return matchedLeadIds;
+    } catch (err) {
+      this.logger.warn(`findLeadsByCanonicalPhone failed for #${leadId}: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  // Combines phone/email (Lead-level and Contact-level index, plus canonical phone matching)
+  // with a recent name match into one comprehensive duplicate check.
   async findGuardrailDuplicates(
     leadId: string,
     lead: LeadDetails,
@@ -500,27 +542,162 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const matched = new Map<string, Set<string>>();
     const addMatches = (ids: string[], ...fields: string[]) => {
       for (const id of ids) {
+        if (id === String(leadId)) continue;
         if (!matched.has(id)) matched.set(id, new Set());
         fields.forEach((f) => matched.get(id)!.add(f));
       }
     };
 
-    const [phoneIds, emailIds, phoneViaContact, emailViaContact, recentNameIds] = await Promise.all([
+    const targetCanonical = this.canonicalPhone(lead.phone || '');
+
+    const [phoneIds, emailIds, phoneViaContact, emailViaContact, recentNameIds, canonicalPhoneIds] = await Promise.all([
       this.findDuplicateLeadIdsByType('PHONE', leadId, lead.phone || '', creds),
       this.findDuplicateLeadIdsByType('EMAIL', leadId, lead.email || '', creds),
       this.findDuplicateLeadIdsViaContact('PHONE', leadId, lead.phone || '', creds),
       this.findDuplicateLeadIdsViaContact('EMAIL', leadId, lead.email || '', creds),
       this.findRecentLeadsByName(leadId, lead.name, creds),
+      targetCanonical ? this.findLeadsByCanonicalPhone(leadId, targetCanonical, creds) : Promise.resolve([]),
     ]);
     addMatches(phoneIds, 'phone');
     addMatches(emailIds, 'email');
     addMatches(phoneViaContact, 'phone (via contact)');
     addMatches(emailViaContact, 'email (via contact)');
     addMatches(recentNameIds, 'name+recent');
+    addMatches(canonicalPhoneIds, 'canonical-phone');
 
     return [...matched.entries()].map(([id, fields]) => ({ leadId: id, matchedFields: [...fields].sort() }));
   }
 
+
+  // ─── Bitrix24 Timeline & Status Mutations ────────────────────────────────
+
+  async addLeadTimelineComment(leadId: string, comment: string, creds: BitrixCreds): Promise<boolean> {
+    try {
+      const body = new URLSearchParams();
+      body.append('fields[ENTITY_ID]', leadId);
+      body.append('fields[ENTITY_TYPE]', 'lead');
+      body.append('fields[COMMENT]', comment);
+      if (creds.accessToken) body.append('auth', creds.accessToken);
+
+      const res = await fetch(this.bitrixUrl('crm.timeline.comment.add', creds), { method: 'POST', body });
+      const data = (await res.json()) as any;
+      if (data.result) {
+        this.logger.log(`Added timeline comment to Lead #${leadId}`);
+        return true;
+      }
+      this.logger.warn(`addLeadTimelineComment failed for Lead #${leadId}: ${JSON.stringify(data)}`);
+      return false;
+    } catch (err) {
+      this.logger.error(`addLeadTimelineComment error for Lead #${leadId}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  async updateLeadStatus(leadId: string, statusId: string, creds: BitrixCreds): Promise<boolean> {
+    try {
+      const body = new URLSearchParams();
+      body.append('id', leadId);
+      body.append('fields[STATUS_ID]', statusId);
+      if (creds.accessToken) body.append('auth', creds.accessToken);
+
+      const res = await fetch(this.bitrixUrl('crm.lead.update', creds), { method: 'POST', body });
+      const data = (await res.json()) as any;
+      if (data.result === true) {
+        this.logger.log(`Updated Lead #${leadId} STATUS_ID to "${statusId}"`);
+        return true;
+      }
+      this.logger.warn(`updateLeadStatus failed for Lead #${leadId}: ${JSON.stringify(data)}`);
+      return false;
+    } catch (err) {
+      this.logger.error(`updateLeadStatus error for Lead #${leadId}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Option 1: True CRM Auto-Merge & Junk Closure
+   * Merges duplicate Lead #2 into Primary Lead #1 in Bitrix24:
+   * 1. Posts a timeline comment on Lead #1 with Lead #2's details and source.
+   * 2. Sets Lead #2 status in Bitrix24 to JUNK (STATUS_ID: "JUNK").
+   * 3. Sends a WhatsApp alert to Lead #1's assigned agent (if WA enabled).
+   * 4. Logs the auto-merge in the DuplicateLead database table.
+   */
+  private async autoMergeLead(
+    leadId: string,
+    lead: LeadDetails,
+    primaryLeadId: string,
+    matchedFields: string[],
+    team: string,
+    creds: BitrixCreds,
+  ): Promise<{ success: boolean; skipped: boolean; message: string }> {
+    this.logger.warn(`[Auto-Merge] Lead #${leadId} ("${lead.name}") matches Primary Lead #${primaryLeadId} via ${matchedFields.join(', ')}. Merging & marking #${leadId} as JUNK.`);
+
+    // 1. Post timeline comment on Primary Lead #1 in Bitrix24
+    const commentText =
+      `ℹ️ [BitrixFlow Auto-Merge]\n` +
+      `Customer re-submitted a lead entry via channel "${lead.source}".\n` +
+      `• Duplicate Lead ID: #${leadId}\n` +
+      `• Name: ${lead.name}\n` +
+      `• Phone: ${lead.phone || 'N/A'}\n` +
+      `• Email: ${lead.email || 'N/A'}\n` +
+      `• Matched via: ${matchedFields.join(', ')}\n` +
+      `• Auto-Action: Marked Lead #${leadId} as JUNK in Bitrix24. Primary ownership remains unchanged.`;
+
+    await this.addLeadTimelineComment(primaryLeadId, commentText, creds);
+
+    // 2. Set Duplicate Lead #2 status to JUNK in Bitrix24
+    await this.updateLeadStatus(leadId, 'JUNK', creds);
+
+    // 3. Notify owner of Primary Lead #1 via WhatsApp if enabled
+    try {
+      const primaryLead = await this.fetchLeadDetails(primaryLeadId, creds);
+      if (primaryLead.assignedById) {
+        const ownerAgent = await this.agent.findFirst({ where: { bitrix_user_id: String(primaryLead.assignedById) } });
+        const settings = await this.getSettings();
+        if (ownerAgent && settings.WHATSAPP_ENABLED === 'true' && ownerAgent.whatsapp_phone) {
+          await this.whatsapp.sendLeadAssignedNotification(
+            ownerAgent.whatsapp_phone,
+            ownerAgent.name,
+            `${lead.name} (Re-engaged via ${lead.source})`,
+            lead.phone || '',
+            0,
+            lead.source,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`WhatsApp notification for auto-merge failed: ${(err as Error).message}`);
+    }
+
+    // 4. Record the auto-merge in DuplicateLead database table
+    await this.duplicateLead.upsert({
+      where: { lead_id: String(leadId) },
+      update: {
+        matched_lead_ids: JSON.stringify([String(primaryLeadId)]),
+        matched_fields: JSON.stringify(matchedFields),
+        team,
+        auto_merged: true,
+        resolved: true,
+        resolved_at: new Date(),
+      },
+      create: {
+        lead_id: String(leadId),
+        lead_name: lead.name,
+        team,
+        matched_lead_ids: JSON.stringify([String(primaryLeadId)]),
+        matched_fields: JSON.stringify(matchedFields),
+        auto_merged: true,
+        resolved: true,
+        resolved_at: new Date(),
+      },
+    });
+
+    return {
+      success: true,
+      skipped: true,
+      message: `Auto-merged into Primary Lead #${primaryLeadId} — timeline comment added and Lead #${leadId} set to JUNK in Bitrix24.`,
+    };
+  }
 
   // ─── Bitrix24: Mutations ───────────────────────────────────────────────────
 
@@ -701,17 +878,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // ── Routing — the Escalation Manager is the catch-all. Anything that can't be
       // cleanly round-robin assigned to an active agent goes to the Manager. ──
 
-      // Out of business hours → Manager immediately.
+      // Out of business hours → Queue and escalate to Manager immediately.
       if (!force && !this.isWithinBusinessHours(settings)) {
+        await this.storeLateLeadIfAbsent(cleanLeadId);
         return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, 'arrived outside business hours', settings, creds);
       }
 
-      // Duplicate guardrail — flagged, left unassigned, not sent to the
-      // manager either. A human reviews it from the Duplicates page.
+      // Duplicate guardrail — Auto-Merge Lead #2 into Primary Lead #1 and set Lead #2 status to JUNK
       if (!force) {
         const duplicates = await this.findGuardrailDuplicates(cleanLeadId, lead, creds);
         if (duplicates.length > 0) {
-          return this.flagAsDuplicate(cleanLeadId, lead, resolvedTeam, duplicates);
+          const primaryLeadId = duplicates[0].leadId;
+          const matchedFields = [...new Set(duplicates.flatMap((d) => d.matchedFields))];
+          return this.autoMergeLead(cleanLeadId, lead, primaryLeadId, matchedFields, resolvedTeam, creds);
         }
       }
 
@@ -740,8 +919,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       this.createBitrixTask(leadId, lead.name, agent.bitrix_user_id, creds, slaHours),
     ]);
     await this.setKnownOwner(leadId, agent.bitrix_user_id);
-    const log = await this.assignmentLog.create({
-      data: { lead_id: leadId, agent_id: agent.id || 'manual-assignee', agent_name: agent.name, team },
+    const agentId = agent.id || 'manual-assignee';
+    const log = await this.assignmentLog.upsert({
+      where: { lead_id_agent_id: { lead_id: leadId, agent_id: agentId } },
+      update: { assigned_at: new Date() },
+      create: { lead_id: leadId, agent_id: agentId, agent_name: agent.name, team },
     });
     let waNotified = false;
     if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
@@ -772,8 +954,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       ),
     ]);
     await this.setKnownOwner(leadId, managerId);
-    const log = await this.assignmentLog.create({
-      data: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
+    const managerAgentId = manager?.id || 'escalation-manager';
+    const log = await this.assignmentLog.upsert({
+      where: { lead_id_agent_id: { lead_id: leadId, agent_id: managerAgentId } },
+      update: { assigned_at: new Date() },
+      create: { lead_id: leadId, agent_id: managerAgentId, agent_name: manager?.name || `Manager #${managerId}`, team },
     });
     if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
       const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours, lead.source);
@@ -902,6 +1087,10 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     for (const lateLead of leads) {
       try {
         const result = await this.processLeadAssignment(lateLead.lead_id, undefined, creds, true);
+        await this.lateLead.update({
+          where: { lead_id: lateLead.lead_id },
+          data: { processed: true, processed_at: new Date() },
+        });
         if (result.skipped) skipped++;
         else if (result.success) processed++;
         else failed++;
@@ -913,6 +1102,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     this.logger.log(`Cron done — processed: ${processed}, skipped: ${skipped}, failed: ${failed}`);
     return { processed, skipped, failed };
+  }
+
+  async purgeStaleLateLeads(maxAgeHours = 48): Promise<number> {
+    const cutoff = new Date(Date.now() - maxAgeHours * 3600 * 1000);
+    const result = await this.lateLead.updateMany({
+      where: { processed: false, created_at: { lt: cutoff } },
+      data: { processed: true, processed_at: new Date() },
+    });
+    if (result.count > 0) {
+      this.logger.log(`Auto-purged ${result.count} stale late lead(s) older than ${maxAgeHours} hours.`);
+    }
+    return result.count;
   }
 
   // ─── Dashboard Status (combined snapshot for the UI) ────────────────────────

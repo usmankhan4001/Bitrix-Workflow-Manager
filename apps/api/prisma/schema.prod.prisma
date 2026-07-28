@@ -79,6 +79,7 @@ model DuplicateLead {
   team             String
   matched_lead_ids String    // JSON array of the other lead ID(s) it matched
   matched_fields   String    // JSON array of which fields matched (phone, email, name+recent, ...)
+  auto_merged      Boolean   @default(false)
   detected_at      DateTime  @default(now())
   resolved         Boolean   @default(false)
   resolved_at      DateTime?

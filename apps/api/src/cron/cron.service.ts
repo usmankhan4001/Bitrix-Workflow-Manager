@@ -20,12 +20,20 @@ export class CronService {
     // Check if we're in the 1-minute window at the start of the business day
     if (!this.isStartOfDay(settings)) return;
 
+    // Purge any stale late leads older than 48 hours to prevent queue backlog
+    await this.workflow.purgeStaleLateLeads(48);
+
     const pending = await this.workflow.getLateLeads();
     if (pending.length === 0) return;
 
     this.logger.log(`⏰ Day-start cron triggered — ${pending.length} late lead(s) to process`);
     const result = await this.workflow.processAllLateLeads();
     this.logger.log(`✅ Cron complete — processed: ${result.processed}, skipped: ${result.skipped}, failed: ${result.failed}`);
+  }
+
+  @Cron('0 * * * *') // every hour
+  async hourlyCleanup() {
+    await this.workflow.purgeStaleLateLeads(48);
   }
 
   private isStartOfDay(settings: Record<string, string>): boolean {

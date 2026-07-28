@@ -9,6 +9,7 @@ interface DuplicateEntry {
   team: string;
   matched_lead_ids: string;
   matched_fields: string;
+  auto_merged?: boolean;
   detected_at: string;
   resolved: boolean;
   resolved_at: string | null;
@@ -95,8 +96,7 @@ const Duplicates: React.FC = () => {
         padding: '10px 20px', background: 'var(--b24-primary-dim)', borderBottom: '1px solid var(--b24-primary-ring)',
         fontSize: 12, color: 'var(--b24-text-muted)',
       }}>
-        These leads matched an existing lead closely enough (phone, email, or the same name arriving within 30 minutes) to be held back —
-        they were <strong style={{ color: 'var(--b24-text)' }}>not assigned to anyone or sent to the Escalation Manager</strong>. Review them in Bitrix and assign manually if they're genuinely separate customers.
+        Duplicate leads matching existing contacts (phone, email, or recent name submission) are <strong style={{ color: 'var(--b24-text)' }}>automatically merged into the primary lead</strong>, notified to the original agent, and marked as <strong style={{ color: 'var(--b24-text)' }}>JUNK</strong> in Bitrix24 to prevent CRM clutter.
       </div>
 
       {/* Table */}
@@ -166,7 +166,9 @@ const Duplicates: React.FC = () => {
                   </span>
                   <span style={{ color: 'var(--b24-text-muted)', fontSize: 12 }}>{formatDate(entry.detected_at)}</span>
                   <span>
-                    {!entry.resolved && (
+                    {entry.auto_merged ? (
+                      <span className="b24-badge b24-badge-success" style={{ fontSize: 10 }}>Auto-Merged</span>
+                    ) : !entry.resolved ? (
                       <button
                         onClick={() => dismiss(entry.id)}
                         disabled={resolving === entry.id}
@@ -175,6 +177,8 @@ const Duplicates: React.FC = () => {
                       >
                         {resolving === entry.id ? 'Dismissing…' : 'Dismiss'}
                       </button>
+                    ) : (
+                      <span className="b24-badge b24-badge-neutral" style={{ fontSize: 10 }}>Dismissed</span>
                     )}
                   </span>
                 </div>

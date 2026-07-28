@@ -878,20 +878,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // ── Routing — the Escalation Manager is the catch-all. Anything that can't be
       // cleanly round-robin assigned to an active agent goes to the Manager. ──
 
-      // Out of business hours → Queue and escalate to Manager immediately.
+      // Out of business hours → Queue for automatic round-robin assignment when business hours open.
       if (!force && !this.isWithinBusinessHours(settings)) {
         await this.storeLateLeadIfAbsent(cleanLeadId);
-        return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, 'arrived outside business hours', settings, creds);
+        this.logger.log(`Lead #${cleanLeadId} ("${lead.name}") queued — arrived outside business hours.`);
+        return { success: true, queued: true, message: 'Arrived outside business hours — queued for automatic round-robin at business open' };
       }
 
       // Duplicate guardrail — Auto-Merge Lead #2 into Primary Lead #1 and set Lead #2 status to JUNK
-      if (!force) {
-        const duplicates = await this.findGuardrailDuplicates(cleanLeadId, lead, creds);
-        if (duplicates.length > 0) {
-          const primaryLeadId = duplicates[0].leadId;
-          const matchedFields = [...new Set(duplicates.flatMap((d) => d.matchedFields))];
-          return this.autoMergeLead(cleanLeadId, lead, primaryLeadId, matchedFields, resolvedTeam, creds);
-        }
+      const duplicates = await this.findGuardrailDuplicates(cleanLeadId, lead, creds);
+      if (duplicates.length > 0) {
+        const primaryLeadId = duplicates[0].leadId;
+        const matchedFields = [...new Set(duplicates.flatMap((d) => d.matchedFields))];
+        return this.autoMergeLead(cleanLeadId, lead, primaryLeadId, matchedFields, resolvedTeam, creds);
       }
 
       // Fresh lead → round-robin to the next active agent. Locked per-team so
@@ -899,7 +898,9 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return this.withTeamLock(resolvedTeam, async () => {
         const agent = await this.pickNextAgent(resolvedTeam);
         if (!agent) {
-          return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, `no active agents in team "${resolvedTeam}"`, settings, creds);
+          await this.storeLateLeadIfAbsent(cleanLeadId);
+          this.logger.warn(`Lead #${cleanLeadId} ("${lead.name}") queued — no active agents in team "${resolvedTeam}".`);
+          return { success: true, queued: true, message: `No active agents in team "${resolvedTeam}" — queued for round-robin when agent comes online` };
         }
         return this.assignToAgent(cleanLeadId, lead, agent, resolvedTeam, slaHours, settings, creds, 'round-robin');
       });

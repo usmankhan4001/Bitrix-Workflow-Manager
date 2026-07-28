@@ -23,13 +23,16 @@ model Agent {
 }
 
 model AssignmentLog {
-  id           String   @id @default(uuid())
-  lead_id      String
-  agent_id     String
-  agent_name   String
-  team         String
-  assigned_at  DateTime @default(now())
-  wa_notified  Boolean  @default(false)
+  id              String   @id @default(uuid())
+  lead_id         String
+  agent_id        String
+  agent_name      String
+  team            String
+  assigned_at     DateTime @default(now())
+  wa_notified     Boolean  @default(false)
+  phone           String?
+  email           String?
+  canonical_phone String?
 
   // Backstop against duplicate assignment rows for the same lead+agent pair.
   // Legitimate reassignment to a *different* agent still gets its own row.
@@ -85,4 +88,7 @@ model DuplicateLead {
   detected_at      DateTime  @default(now())
   resolved         Boolean   @default(false)
   resolved_at      DateTime?
+  phone            String?
+  email            String?
+  canonical_phone  String?
 }

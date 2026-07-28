@@ -2,8 +2,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// LOCAL DEV: SQLite  |  PRODUCTION: overridden by Dockerfile → schema.prod.prisma
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -22,25 +23,29 @@ model Agent {
 }
 
 model AssignmentLog {
-  id           String   @id @default(uuid())
-  lead_id      String
-  agent_id     String
-  agent_name   String
-  team         String
-  assigned_at  DateTime @default(now())
-  wa_notified  Boolean  @default(false)
+  id              String   @id @default(uuid())
+  lead_id         String
+  agent_id        String
+  agent_name      String
+  team            String
+  assigned_at     DateTime @default(now())
+  wa_notified     Boolean  @default(false)
+  phone           String?
+  email           String?
+  canonical_phone String?
 
   // Backstop against duplicate assignment rows for the same lead+agent pair.
   // Legitimate reassignment to a *different* agent still gets its own row.
   @@unique([lead_id, agent_id])
 }
 
+// Agents who completed a task and are first in line for the next overdue lead
 model CompletedQueue {
   id          String   @id @default(uuid())
   agent_id    String
   agent_name  String
   team        String
-  lead_id     String
+  lead_id     String   // the lead they completed
   queued_at   DateTime @default(now())
 }
 
@@ -83,4 +88,7 @@ model DuplicateLead {
   detected_at      DateTime  @default(now())
   resolved         Boolean   @default(false)
   resolved_at      DateTime?
+  phone            String?
+  email            String?
+  canonical_phone  String?
 }

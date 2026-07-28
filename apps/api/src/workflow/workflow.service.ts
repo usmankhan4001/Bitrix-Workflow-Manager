@@ -880,15 +880,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
     this.activeAssignments.add(cleanLeadId);
 
+    let phoneLockKey: string | null = null;
+
     try {
       // Idempotency guard. A lead already logged for this exact agent must never
-      // produce a second task/WhatsApp/log row — no matter how we got here (a
-      // retried webhook delivery, or a Bitrix ONCRMLEADUPDATE event that merely
-      // touches an already-assigned lead rather than genuinely reassigning it,
-      // e.g. the round-robin's own crm.lead.update firing back through
-      // handleLeadChangeWebhook). This check runs even when force=true, since
-      // force is meant to bypass routing checks (hours/duplicate/source), not
-      // idempotency.
+      // produce a second task/WhatsApp/log row
       const existingLog = await this.assignmentLog.findFirst({
         where: { lead_id: cleanLeadId },
         orderBy: { assigned_at: 'desc' },
@@ -902,10 +898,24 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         }
       }
 
-      // Already flagged as a duplicate on a previous pass (e.g. a retried
-      // webhook delivery) — don't re-run the guardrail's several Bitrix API
-      // calls, and don't let a forced/manager path assign it out from under
-      // the duplicate flag either.
+      // Fetch lead details up front — needed for routing, phone locking, and deduplication.
+      const lead = await this.fetchLeadDetails(cleanLeadId, creds);
+
+      // Phone-Level Concurrency Lock: If another lead with the exact same canonical phone
+      // is being processed right now, wait up to 3 seconds for it to finish so deduplication
+      // sees the newly assigned primary lead.
+      const cPhone = this.canonicalPhone(lead.phone || '');
+      if (cPhone) {
+        phoneLockKey = `phone_${cPhone}`;
+        let waits = 0;
+        while (this.activeAssignments.has(phoneLockKey) && waits < 6) {
+          await new Promise((res) => setTimeout(res, 500));
+          waits++;
+        }
+        this.activeAssignments.add(phoneLockKey);
+      }
+
+      // Already flagged as a duplicate on a previous pass
       if (!force) {
         const existingFlag = await this.duplicateLead.findUnique({ where: { lead_id: cleanLeadId } });
         if (existingFlag) {
@@ -913,9 +923,6 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
           return { success: true, skipped: true, message: `Lead flagged as duplicate of ${matches} — left unassigned` };
         }
       }
-
-      // Fetch lead details up front — needed for routing and escalation messaging.
-      const lead = await this.fetchLeadDetails(cleanLeadId, creds);
 
       // Skip sources outside the allow-list (empty list = all allowed)
       if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
@@ -969,6 +976,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       });
     } finally {
       this.activeAssignments.delete(cleanLeadId);
+      if (phoneLockKey) this.activeAssignments.delete(phoneLockKey);
     }
   }
 

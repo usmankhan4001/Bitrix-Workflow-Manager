@@ -338,6 +338,31 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         if (!email) email = contact.email;
       }
 
+      // Bitrix integrations (e.g. Website / CRM form) routinely create the Lead entity first,
+      // and attach the PHONE or link CONTACT_ID 1-2 seconds later via update.
+      // If phone & email are empty on first fetch, pause 2 seconds and re-check once.
+      if (!phone && !email) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+          const resRetry = await fetch(url);
+          const dataRetry = (await resRetry.json()) as any;
+          const retryLead = dataRetry.result;
+          if (retryLead) {
+            if (retryLead.PHONE && Array.isArray(retryLead.PHONE) && retryLead.PHONE.length > 0) {
+              phone = retryLead.PHONE[0]?.VALUE || '';
+            }
+            if (retryLead.EMAIL && Array.isArray(retryLead.EMAIL) && retryLead.EMAIL.length > 0) {
+              email = retryLead.EMAIL[0]?.VALUE || '';
+            }
+            if ((!phone || !email) && retryLead.CONTACT_ID) {
+              const contact = await this.fetchContactComm(String(retryLead.CONTACT_ID), creds);
+              if (!phone) phone = contact.phone;
+              if (!email) email = contact.email;
+            }
+          }
+        } catch {}
+      }
+
       return {
         name: displayName,
         source: sourceLabel,
@@ -503,16 +528,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   ): Promise<string[]> {
     if (!targetCanonicalPhone) return [];
     try {
-      const params = new URLSearchParams();
-      params.append('order[ID]', 'DESC');
-      params.append('select[]', 'ID');
-      params.append('select[]', 'PHONE');
+      const matchedLeadIds = new Set<string>();
+
+      // 1. Search recent leads directly
+      const leadParams = new URLSearchParams();
+      leadParams.append('order[ID]', 'DESC');
+      leadParams.append('select[]', 'ID');
+      leadParams.append('select[]', 'PHONE');
+      leadParams.append('select[]', 'CONTACT_ID');
       const sep = this.bitrixUrl('crm.lead.list', creds).includes('?') ? '&' : '?';
-      const res = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep}${params.toString()}`);
+      const res = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep}${leadParams.toString()}`);
       const data = (await res.json()) as any;
       const rows: any[] = (data.result || []).slice(0, 100);
 
-      const matchedLeadIds: string[] = [];
       for (const r of rows) {
         const rId = String(r.ID);
         if (rId === String(leadId)) continue;
@@ -520,12 +548,47 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         for (const p of phones) {
           const val = p?.VALUE || '';
           if (this.canonicalPhone(val) === targetCanonicalPhone) {
-            matchedLeadIds.push(rId);
+            matchedLeadIds.add(rId);
             break;
           }
         }
       }
-      return matchedLeadIds;
+
+      // 2. Search recent Contacts in Bitrix via crm.contact.list
+      const contactParams = new URLSearchParams();
+      contactParams.append('order[ID]', 'DESC');
+      contactParams.append('select[]', 'ID');
+      contactParams.append('select[]', 'PHONE');
+      const resContacts = await fetch(`${this.bitrixUrl('crm.contact.list', creds)}${sep}${contactParams.toString()}`);
+      const dataContacts = (await resContacts.json()) as any;
+      const contactRows: any[] = (dataContacts.result || []).slice(0, 100);
+
+      const matchingContactIds = new Set<string>();
+      for (const c of contactRows) {
+        const cPhones: any[] = Array.isArray(c.PHONE) ? c.PHONE : [];
+        for (const p of cPhones) {
+          if (this.canonicalPhone(p?.VALUE || '') === targetCanonicalPhone) {
+            matchingContactIds.add(String(c.ID));
+            break;
+          }
+        }
+      }
+
+      // Map matching contacts back to their leads
+      if (matchingContactIds.size > 0) {
+        for (const cId of matchingContactIds) {
+          const params = new URLSearchParams();
+          params.append('filter[CONTACT_ID]', cId);
+          params.append('select[]', 'ID');
+          const res2 = await fetch(`${this.bitrixUrl('crm.lead.list', creds)}${sep}${params.toString()}`);
+          const data2 = (await res2.json()) as any;
+          for (const l of data2.result || []) {
+            if (String(l.ID) !== String(leadId)) matchedLeadIds.add(String(l.ID));
+          }
+        }
+      }
+
+      return [...matchedLeadIds];
     } catch (err) {
       this.logger.warn(`findLeadsByCanonicalPhone failed for #${leadId}: ${(err as Error).message}`);
       return [];

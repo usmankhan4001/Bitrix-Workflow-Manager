@@ -17,7 +17,7 @@ const DEFAULT_BUSINESS_HOURS = {
 const SETTING_DEFAULTS: Record<string, string> = {
   BUSINESS_HOURS: JSON.stringify(DEFAULT_BUSINESS_HOURS), // per-day-of-week {start,end}; a missing day is closed
   WHATSAPP_ENABLED: 'false',
-  SLA_MINUTES: '60',                  // how long an agent has, in business minutes, before the lead rotates to the next agent
+  SLA_MINUTES: '2',                   // TEMP: set low for testing — how long an agent has, in business minutes, before the lead rotates to the next agent. Change back (or edit in Settings) once testing is done.
   MAX_ROTATION_LAPS: '2',             // how many full laps through the active roster before escalating
   NEW_LEAD_STATUS_ID: 'NEW',          // Bitrix STATUS_ID that counts as "not yet worked" — any other value closes the SLA clock
   SELF_CREATED_SOURCE_IDS: '[]',      // JSON array of Bitrix SOURCE_ID values that mean "agent made this lead themselves" — excluded from the workflow entirely

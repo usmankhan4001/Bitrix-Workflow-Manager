@@ -81,11 +81,11 @@ const EscalationDiagram: React.FC = () => (
       {[
         { label: 'Fresh lead (in hours)', sub: 'Round-robin → next agent', color: 'var(--b24-primary-dim)', border: 'var(--b24-primary-ring)', text: 'var(--b24-primary)' },
         { arrow: true },
-        { label: 'Can\'t auto-assign', sub: 'Out-of-hours, duplicate, or no agent', color: 'rgba(224,152,0,0.1)', border: 'rgba(224,152,0,0.3)', text: '#e09800' },
+        { label: 'SLA minutes elapse', sub: 'Still "New Lead" → rotates to next agent (up to Max Laps)', color: 'rgba(224,152,0,0.1)', border: 'rgba(224,152,0,0.3)', text: '#e09800' },
         { arrow: true },
-        { label: 'Escalation Manager', sub: 'Reviews & sets responsible person', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
+        { label: 'Escalation Manager', sub: 'No active agent, laps exhausted, or out-of-hours queue drain failed', color: 'rgba(242,71,61,0.1)', border: 'rgba(242,71,61,0.3)', text: 'var(--b24-red)' },
         { arrow: true },
-        { label: 'Workflow restarts', sub: 'New rep gets task + WhatsApp', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
+        { label: 'Manager reassigns', sub: 'New rep gets WhatsApp + Bitrix alert, SLA restarts', color: 'var(--b24-green-dim)', border: 'var(--b24-green-ring)', text: 'var(--b24-green)' },
       ].map((item: any, i) => item.arrow
         ? <span key={i} style={{ color: 'var(--b24-text-faint)', margin: '0 6px', fontSize: 16 }}>→</span>
         : (
@@ -158,10 +158,26 @@ const Settings: React.FC = () => {
     setToast({ type, msg }); setTimeout(() => setToast(null), 2500);
   };
 
-  const offDays: number[] = (() => { try { return JSON.parse(settings.NOT_ALLOWED_DAYS || '[0,6]'); } catch { return [0, 6]; } })();
-  const toggleOffDay = (i: number) => {
-    const next = offDays.includes(i) ? offDays.filter(d => d !== i) : [...offDays, i].sort();
-    setSettings(s => ({ ...s, NOT_ALLOWED_DAYS: JSON.stringify(next) }));
+  type DayWindow = { start: string; end: string };
+  const DEFAULT_BUSINESS_HOURS: Record<string, DayWindow> = {
+    '1': { start: '10:00', end: '19:00' }, '2': { start: '10:00', end: '19:00' },
+    '3': { start: '10:00', end: '19:00' }, '4': { start: '10:00', end: '19:00' },
+    '5': { start: '10:00', end: '19:00' }, '6': { start: '11:00', end: '16:00' },
+  };
+  const businessHours: Record<string, DayWindow> = (() => {
+    try { return JSON.parse(settings.BUSINESS_HOURS || ''); } catch { return DEFAULT_BUSINESS_HOURS; }
+  })();
+  const toggleDayOpen = (i: number) => {
+    const key = String(i);
+    const next = { ...businessHours };
+    if (next[key]) delete next[key];
+    else next[key] = { start: '10:00', end: '19:00' };
+    setSettings(s => ({ ...s, BUSINESS_HOURS: JSON.stringify(next) }));
+  };
+  const setDayTime = (i: number, field: 'start' | 'end', value: string) => {
+    const key = String(i);
+    const next = { ...businessHours, [key]: { ...(businessHours[key] || { start: '10:00', end: '19:00' }), [field]: value } };
+    setSettings(s => ({ ...s, BUSINESS_HOURS: JSON.stringify(next) }));
   };
 
   const eligibleDeptIds: string[] = (() => { try { return JSON.parse(settings.ELIGIBLE_DEPT_IDS || '[]'); } catch { return []; } })();
@@ -174,6 +190,12 @@ const Settings: React.FC = () => {
   const toggleAllowedSource = (id: string) => {
     const next = allowedSourceIds.includes(id) ? allowedSourceIds.filter(s => s !== id) : [...allowedSourceIds, id];
     setSettings(s => ({ ...s, ALLOWED_SOURCES: JSON.stringify(next) }));
+  };
+
+  const selfCreatedSourceIds: string[] = (() => { try { return JSON.parse(settings.SELF_CREATED_SOURCE_IDS || '[]'); } catch { return []; } })();
+  const toggleSelfCreatedSource = (id: string) => {
+    const next = selfCreatedSourceIds.includes(id) ? selfCreatedSourceIds.filter(s => s !== id) : [...selfCreatedSourceIds, id];
+    setSettings(s => ({ ...s, SELF_CREATED_SOURCE_IDS: JSON.stringify(next) }));
   };
 
   const sourceTeamMap: Record<string, string> = (() => { try { return JSON.parse(settings.SOURCE_TEAM_MAP || '{}'); } catch { return {}; } })();
@@ -254,49 +276,95 @@ const Settings: React.FC = () => {
           <Section
             icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
             title="Business Hours"
-            desc="Leads that arrive outside these hours are held and assigned automatically when the day starts"
+            desc="Leads that arrive outside these hours are queued and assigned automatically the moment the window opens"
           >
+            <div style={{ padding: '8px 0 4px' }}>
+              <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', marginBottom: 12, margin: '0 0 12px 0' }}>
+                Each day can have its own hours, or be off entirely — e.g. a shorter Saturday window. The SLA rotation clock (below) only counts time inside these windows.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                {DAYS.map((day, i) => {
+                  const window = businessHours[String(i)];
+                  const open = !!window;
+                  return (
+                    <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                      <button type="button" onClick={() => toggleDayOpen(i)}
+                        className={`b24-btn ${open ? 'b24-btn-primary' : 'b24-btn-secondary'}`}
+                        style={{ height: 28, fontSize: 12, padding: '0 12px', width: 90, flexShrink: 0 }}>
+                        {day.slice(0, 3)}
+                      </button>
+                      {open ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input type="time" value={window.start} onChange={e => setDayTime(i, 'start', e.target.value)} className="b24-input" style={{ width: 110 }} />
+                          <span style={{ fontSize: 12, color: 'var(--b24-text-faint)' }}>to</span>
+                          <input type="time" value={window.end} onChange={e => setDayTime(i, 'end', e.target.value)} className="b24-input" style={{ width: 110 }} />
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--b24-text-faint)', fontStyle: 'italic' }}>Closed — leads queue</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => save('BUSINESS_HOURS', JSON.stringify(businessHours))} disabled={saving === 'BUSINESS_HOURS'} className="b24-btn b24-btn-primary">
+                {saving === 'BUSINESS_HOURS' ? 'Saving…' : 'Save Business Hours'}
+              </button>
+            </div>
+
             <FormRow
-              label="Start Time"
-              tip="Leads that arrive before this time are held in a queue and assigned all at once when the clock hits this time."
-              right={<><input type="time" value={settings.WORKFLOW_START_TIME || '09:00'} onChange={e => setSettings(s => ({ ...s, WORKFLOW_START_TIME: e.target.value }))} className="b24-input" style={{ width: 120 }} /><SaveBtn onClick={() => save('WORKFLOW_START_TIME', settings.WORKFLOW_START_TIME || '09:00')} saving={saving === 'WORKFLOW_START_TIME'} /></>}
+              label="SLA Minutes"
+              desc="How long an agent has, in business minutes, to move a lead out of the New Lead stage before it rotates to the next agent."
+              tip="Counted only during business hours — a lead assigned near closing time picks up its remaining minutes at the start of the next open window instead of rotating overnight."
+              right={<><input type="number" min={1} max={480} value={settings.SLA_MINUTES || '60'} onChange={e => setSettings(s => ({ ...s, SLA_MINUTES: e.target.value }))} className="b24-input" style={{ width: 72, textAlign: 'center' }} /><span style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginRight: 8 }}>minutes</span><SaveBtn onClick={() => save('SLA_MINUTES', settings.SLA_MINUTES || '60')} saving={saving === 'SLA_MINUTES'} /></>}
             />
             <FormRow
-              label="End Time"
-              tip="Leads that arrive after this time are queued and will be assigned the next morning at Start Time."
-              right={<><input type="time" value={settings.WORKFLOW_END_TIME || '18:00'} onChange={e => setSettings(s => ({ ...s, WORKFLOW_END_TIME: e.target.value }))} className="b24-input" style={{ width: 120 }} /><SaveBtn onClick={() => save('WORKFLOW_END_TIME', settings.WORKFLOW_END_TIME || '18:00')} saving={saving === 'WORKFLOW_END_TIME'} /></>}
-            />
-            <FormRow
-              label="SLA Hours"
-              desc="How many hours an agent has to follow up. Sets the Bitrix task deadline and the 'complete within' time shown in the WhatsApp alert."
-              tip="The follow-up task created in Bitrix gets a deadline this many hours from assignment, and the agent's WhatsApp message tells them to complete it within this window."
-              right={<><input type="number" min={1} max={168} value={settings.SLA_HOURS || '24'} onChange={e => setSettings(s => ({ ...s, SLA_HOURS: e.target.value }))} className="b24-input" style={{ width: 72, textAlign: 'center' }} /><span style={{ fontSize: 12, color: 'var(--b24-text-faint)', marginRight: 8 }}>hours</span><SaveBtn onClick={() => save('SLA_HOURS', settings.SLA_HOURS || '24')} saving={saving === 'SLA_HOURS'} /></>}
+              label="Max Rotation Laps"
+              desc="How many full passes through the active team roster before an untouched lead escalates to the Escalation Manager."
+              tip="Lap 1: everyone in the team gets one turn in order. If nobody moves it, lap 2 restarts from the first agent. Still untouched after that → Escalation Manager, with no further auto-timer."
+              right={<><input type="number" min={1} max={10} value={settings.MAX_ROTATION_LAPS || '2'} onChange={e => setSettings(s => ({ ...s, MAX_ROTATION_LAPS: e.target.value }))} className="b24-input" style={{ width: 72, textAlign: 'center' }} /><SaveBtn onClick={() => save('MAX_ROTATION_LAPS', settings.MAX_ROTATION_LAPS || '2')} saving={saving === 'MAX_ROTATION_LAPS'} /></>}
             />
           </Section>
 
-          {/* Off Days */}
+          {/* Self-Created Leads */}
           <Section
-            icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
-            title="Off Days"
-            desc="Leads arriving on these days are held and assigned on the next working day"
+            icon={<svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
+            title="Self-Created Leads"
+            desc="Leads an agent creates for themselves never enter the workflow — pick the Bitrix24 Source(s) used for that"
           >
-            <div style={{ padding: '8px 0' }}>
-              <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', marginBottom: 12, margin: '0 0 12px 0' }}>
-                Click a day to mark it as off. <strong style={{ color: 'var(--b24-text)' }}>Highlighted</strong> = off day (leads queue). Unhighlighted = working day.
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                {DAYS.map((day, i) => (
-                  <button key={day} type="button" onClick={() => toggleOffDay(i)}
-                    className={`b24-btn ${offDays.includes(i) ? 'b24-btn-primary' : 'b24-btn-secondary'}`}
-                    style={{ height: 30, fontSize: 12, padding: '0 14px' }}>
-                    {day.slice(0, 3)}
-                    {offDays.includes(i) && <span style={{ marginLeft: 5, fontSize: 10 }}>off</span>}
-                  </button>
-                ))}
+            <div style={{ padding: '14px 0 6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0, maxWidth: 480 }}>
+                  {selfCreatedSourceIds.length === 0
+                    ? 'No source designated yet — self-created leads will be treated like any other lead until one is selected.'
+                    : `${selfCreatedSourceIds.length} source${selfCreatedSourceIds.length > 1 ? 's' : ''} marked as self-created — matching leads are left exactly as Bitrix set them up, no auto-assignment or SLA tracking.`}
+                </p>
+                <SaveBtn onClick={() => save('SELF_CREATED_SOURCE_IDS', settings.SELF_CREATED_SOURCE_IDS || '[]')} saving={saving === 'SELF_CREATED_SOURCE_IDS'} />
               </div>
-              <button onClick={() => save('NOT_ALLOWED_DAYS', settings.NOT_ALLOWED_DAYS || '[0,6]')} disabled={saving === 'NOT_ALLOWED_DAYS'} className="b24-btn b24-btn-primary">
-                {saving === 'NOT_ALLOWED_DAYS' ? 'Saving…' : 'Save Off Days'}
-              </button>
+              {bitrixSources.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--b24-text-faint)', fontStyle: 'italic', margin: 0 }}>No lead sources loaded — check Bitrix24 credentials.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {bitrixSources.map(src => {
+                    const checked = selfCreatedSourceIds.includes(src.id);
+                    return (
+                      <button
+                        key={src.id}
+                        type="button"
+                        onClick={() => toggleSelfCreatedSource(src.id)}
+                        className={`b24-btn ${checked ? 'b24-btn-primary' : 'b24-btn-secondary'}`}
+                        style={{ height: 28, fontSize: 12, padding: '0 12px', gap: 5, display: 'flex', alignItems: 'center' }}
+                      >
+                        {checked && (
+                          <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.121-4.121a1 1 0 011.414-1.414L8.414 12.172l6.879-6.879a1 1 0 011.414 0z" clipRule="evenodd"/>
+                          </svg>
+                        )}
+                        {src.name} <span style={{ fontSize: 10, opacity: 0.6, fontFamily: 'monospace' }}>({src.id})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </Section>
 

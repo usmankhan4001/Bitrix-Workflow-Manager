@@ -115,7 +115,7 @@ const Notifications: React.FC = () => {
             <div>
               <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--b24-text)', marginBottom: 4, margin: 0 }}>WhatsApp Alerts via WAHA</p>
               <p style={{ fontSize: 12, color: 'var(--b24-text-muted)', margin: 0 }}>
-                When enabled, each salesperson gets a WhatsApp message the moment a lead is assigned to them — with the lead's name, contact number, and how long they have to follow up. Messages are sent through your self-hosted <strong style={{ color: 'var(--b24-text)' }}>WAHA</strong> service (configured via <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_URL</code> / <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_API_KEY</code>). No message templates to approve.
+                When enabled, each salesperson gets a WhatsApp message every time a lead is assigned or reassigned to them — with the lead's name, contact number, and how many minutes they have before it rotates to the next agent. Messages are sent through your self-hosted <strong style={{ color: 'var(--b24-text)' }}>WAHA</strong> service (configured via <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_URL</code> / <code style={{ background: 'var(--b24-input-bg)', padding: '1px 5px', borderRadius: 3, fontSize: 11 }}>WAHA_API_KEY</code>). No message templates to approve. Every alert is also sent as a native <strong style={{ color: 'var(--b24-text)' }}>Bitrix24 in-app notification</strong> (bell icon) at the same time, regardless of this toggle, so agents are covered even without WhatsApp configured.
               </p>
             </div>
           </div>
@@ -142,7 +142,7 @@ const Notifications: React.FC = () => {
                 This is the message each agent receives when a lead is assigned to them (no templates to configure):
               </p>
               <div style={{ background: 'var(--b24-input-bg)', border: '1px solid var(--b24-divider)', borderRadius: 8, padding: '14px 16px', fontSize: 13, color: 'var(--b24-text)', whiteSpace: 'pre-line', lineHeight: 1.7, fontFamily: 'system-ui' }}>
-                {'🟢 New lead assigned to you\n\n👤 Agent: Ahmad Ali Shah\n📋 Lead: Tania\n📞 Contact: 03001234567\n🌐 Source: Website\n⏰ Complete within: ' + (settings.SLA_HOURS || '24') + ' hours (by 16 Jun, 03:20 pm)\n\nPlease follow up and update the lead in Bitrix24.'}
+                {'🟢 New lead assigned to you\n\n👤 Agent: Ahmad Ali Shah\n📋 Lead: Tania\n📞 Contact: 03001234567\n🌐 Source: Website\n⏰ Move it out of "New Lead" within: ' + (settings.SLA_MINUTES || '60') + ' minutes (by 16 Jun, 03:20 pm) or it moves to the next agent\n\nPlease follow up and update the lead in Bitrix24.'}
               </div>
             </div>
           </div>
@@ -188,10 +188,28 @@ const Notifications: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
                 {[
                   {
-                    label: 'Lead Assigned',
-                    desc: 'Fires when a lead is assigned to someone — a rep (round-robin), the Escalation Manager (out-of-hours / duplicate / no agent), or a rep after the manager reassigns.',
-                    params: 'Agent name  ·  Lead name  ·  Contact number  ·  Time to complete',
+                    label: 'Lead Assigned (round-robin)',
+                    desc: 'Fires when a fresh lead is assigned to the next rep in a team\'s rotation.',
+                    params: 'Agent name  ·  Lead name  ·  Contact number  ·  Minutes remaining',
                     color: 'var(--b24-green)',
+                  },
+                  {
+                    label: 'SLA Rotation Timeout',
+                    desc: 'Fires when a lead sits in "New Lead" past its SLA minutes and rotates to the next agent in the team (or restarts a fresh lap).',
+                    params: 'Agent name  ·  Lead name  ·  Contact number  ·  Minutes remaining',
+                    color: '#e09800',
+                  },
+                  {
+                    label: 'Escalated to Manager',
+                    desc: 'Fires when no active agent is available, or the rotation exhausts every lap with no agent acting. No further timer runs until the manager reassigns it.',
+                    params: 'Manager name  ·  Lead name  ·  Contact number  ·  Reason',
+                    color: 'var(--b24-red)',
+                  },
+                  {
+                    label: 'Manual / Manager Reassignment',
+                    desc: 'Fires when anyone changes a lead\'s responsible person directly in Bitrix24 — the SLA rotation restarts for the new owner.',
+                    params: 'Agent name  ·  Lead name  ·  Contact number  ·  Minutes remaining',
+                    color: 'var(--b24-primary)',
                   },
                 ].map((item, idx) => (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.01)', border: '1px solid var(--b24-divider)', borderBottom: idx === 1 ? '1px solid var(--b24-divider)' : undefined }}>

@@ -4,6 +4,7 @@ import Sidebar from './components/layout/Sidebar';
 import DashboardHome from './pages/DashboardHome';
 import Assignment from './pages/Assignment';
 import AssignmentLog from './pages/AssignmentLog';
+import Rotations from './pages/Rotations';
 import Duplicates from './pages/Duplicates';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
@@ -48,6 +49,7 @@ function App() {
           <Route index element={<DashboardHome />} />
           <Route path="assignment" element={<Assignment />} />
           <Route path="assignment-log" element={<AssignmentLog />} />
+          <Route path="rotations" element={<Rotations />} />
           <Route path="duplicates" element={<Duplicates />} />
           <Route path="settings" element={<Settings />} />
           <Route path="notifications" element={<Notifications />} />

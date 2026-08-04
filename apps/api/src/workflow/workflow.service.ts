@@ -2,12 +2,25 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 
+// Per-day business-hours schedule. Keyed by JS Date "day" (0=Sun..6=Sat); a day
+// with no entry is fully closed. Matches the default schedule the sales team
+// actually works: Mon-Fri 10:00-19:00, Sat 11:00-16:00, Sunday off.
+const DEFAULT_BUSINESS_HOURS = {
+  '1': { start: '10:00', end: '19:00' },
+  '2': { start: '10:00', end: '19:00' },
+  '3': { start: '10:00', end: '19:00' },
+  '4': { start: '10:00', end: '19:00' },
+  '5': { start: '10:00', end: '19:00' },
+  '6': { start: '11:00', end: '16:00' },
+};
+
 const SETTING_DEFAULTS: Record<string, string> = {
-  WORKFLOW_START_TIME: '09:00',
-  WORKFLOW_END_TIME: '18:00',
-  NOT_ALLOWED_DAYS: '[0,6]',
+  BUSINESS_HOURS: JSON.stringify(DEFAULT_BUSINESS_HOURS), // per-day-of-week {start,end}; a missing day is closed
   WHATSAPP_ENABLED: 'false',
-  SLA_HOURS: '24',
+  SLA_MINUTES: '60',                  // how long an agent has, in business minutes, before the lead rotates to the next agent
+  MAX_ROTATION_LAPS: '2',             // how many full laps through the active roster before escalating
+  NEW_LEAD_STATUS_ID: 'NEW',          // Bitrix STATUS_ID that counts as "not yet worked" — any other value closes the SLA clock
+  SELF_CREATED_SOURCE_IDS: '[]',      // JSON array of Bitrix SOURCE_ID values that mean "agent made this lead themselves" — excluded from the workflow entirely
   ALLOWED_SOURCES: '[]',              // JSON array of source IDs eligible for assignment; empty = all sources allowed
   WORKFLOW_MANAGER_ID: '1',
   WORKFLOW_ENABLED: 'true',            // master on/off switch — set to 'false' to pause all lead assignment
@@ -27,6 +40,8 @@ interface LeadDetails {
   isReturnCustomer?: boolean;
   assignedById?: string;
   modifyById?: string;
+  statusId?: string;
+  createdById?: string;
 }
 
 // Credentials can be OAuth-based or webhook-based
@@ -223,21 +238,94 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   }
 
   // ─── Time / Day Helpers ────────────────────────────────────────────────────
+  // Business hours are per-day-of-week (0=Sun..6=Sat); a day with no entry in
+  // the schedule is fully closed. Replaces the old single start/end + off-days
+  // pair so Saturday can run a shorter window than weekdays.
 
-  isWithinBusinessHours(settings: Record<string, string>): boolean {
-    const { day, hour, minute } = this.getPKTime();
+  getBusinessHoursSchedule(settings: Record<string, string>): Record<string, { start: string; end: string }> {
+    try {
+      return JSON.parse(settings.BUSINESS_HOURS || '{}');
+    } catch {
+      return {};
+    }
+  }
 
-    const notAllowed: number[] = JSON.parse(settings.NOT_ALLOWED_DAYS || '[0,6]');
-    if (notAllowed.includes(day)) return false;
+  private toMinutesOfDay(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
 
-    const [startH, startM] = (settings.WORKFLOW_START_TIME || '09:00').split(':').map(Number);
-    const [endH, endM] = (settings.WORKFLOW_END_TIME || '18:00').split(':').map(Number);
+  isWithinBusinessHours(settings: Record<string, string>, at?: Date): boolean {
+    const schedule = this.getBusinessHoursSchedule(settings);
+    const { day, hour, minute } = at ? this.getPKTimeAt(at) : this.getPKTime();
+    const window = schedule[String(day)];
+    if (!window) return false; // no entry for this day = closed
 
     const currentMins = hour * 60 + minute;
-    const startMins = startH * 60 + startM;
-    const endMins = endH * 60 + endM;
+    return currentMins >= this.toMinutesOfDay(window.start) && currentMins < this.toMinutesOfDay(window.end);
+  }
 
-    return currentMins >= startMins && currentMins < endMins;
+  private getPKTimeAt(date: Date): { day: number; hour: number; minute: number } {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi', hourCycle: 'h23', weekday: 'short', hour: 'numeric', minute: 'numeric',
+    });
+    const parts = formatter.formatToParts(date);
+    const partMap = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return { day: weekdayMap[partMap.weekday] ?? 0, hour: parseInt(partMap.hour, 10), minute: parseInt(partMap.minute, 10) };
+  }
+
+  // Sums only in-business-hours minutes between two timestamps, walking day by
+  // day. This is what lets the 1-hour SLA "pause" overnight/on weekends instead
+  // of ticking in real time — a lead assigned at 6:30pm only accrues 30 minutes
+  // before close, and picks up the remaining 30 minutes the next working day.
+  businessMinutesElapsed(start: Date, end: Date, schedule: Record<string, { start: string; end: string }>): number {
+    if (end <= start) return 0;
+    let total = 0;
+    const cursor = new Date(start);
+
+    // Cap iterations defensively — a lead can't realistically sit unprocessed
+    // for years; this just guards against an unbounded loop if data is bad.
+    for (let i = 0; i < 3650 && cursor < end; i++) {
+      const { day, hour, minute } = this.getPKTimeAt(cursor);
+      const window = schedule[String(day)];
+      const nowMins = hour * 60 + minute;
+
+      // Midnight (in PKT) at the start of the next day, used to advance the cursor.
+      const nextMidnight = new Date(cursor);
+      const pktParts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Karachi', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(cursor);
+      const pm = Object.fromEntries(pktParts.map(p => [p.type, p.value]));
+      const todayMidnight = new Date(`${pm.year}-${pm.month.padStart(2, '0')}-${pm.day.padStart(2, '0')}T00:00:00+05:00`);
+      nextMidnight.setTime(todayMidnight.getTime() + 24 * 3600 * 1000);
+
+      const segmentEnd = end < nextMidnight ? end : nextMidnight;
+
+      if (window) {
+        const startMins = this.toMinutesOfDay(window.start);
+        const endMins = this.toMinutesOfDay(window.end);
+        const dayStart = new Date(todayMidnight.getTime() + Math.max(nowMins, startMins) * 60 * 1000);
+        const dayEnd = new Date(todayMidnight.getTime() + endMins * 60 * 1000);
+        const effectiveStart = cursor > dayStart ? cursor : dayStart;
+        const effectiveEnd = segmentEnd < dayEnd ? segmentEnd : dayEnd;
+        if (effectiveEnd > effectiveStart) {
+          total += (effectiveEnd.getTime() - effectiveStart.getTime()) / 60000;
+        }
+      }
+
+      cursor.setTime(segmentEnd.getTime());
+    }
+    return total;
+  }
+
+  // ─── Self-created leads ─────────────────────────────────────────────────────
+  // An agent creating a lead for themselves (picked from a designated Bitrix
+  // Source, configured in Settings) should never enter the workflow at all.
+
+  isSelfCreatedSource(sourceId: string, settings: Record<string, string>): boolean {
+    if (!sourceId) return false;
+    let selfSources: string[] = [];
+    try { selfSources = JSON.parse(settings.SELF_CREATED_SOURCE_IDS || '[]'); } catch {}
+    return selfSources.map((s) => s.toUpperCase()).includes(sourceId.toUpperCase());
   }
 
   // ─── Source allow-list ─────────────────────────────────────────────────────
@@ -348,6 +436,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         isReturnCustomer: lead.IS_RETURN_CUSTOMER === 'Y',
         assignedById: lead.ASSIGNED_BY_ID,
         modifyById: lead.MODIFY_BY_ID,
+        statusId: lead.STATUS_ID,
+        createdById: lead.CREATED_BY_ID,
       };
     } catch (err) {
       this.logger.warn(`fetchLeadDetails failed for #${leadId}: ${(err as Error).message}`);
@@ -537,52 +627,49 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
-  async createBitrixTask(
-    leadId: string,
-    leadName: string,
-    assigneeUserId: string,
-    creds: BitrixCreds,
-    deadlineHours: number,
-    titleOverride?: string,
-    descriptionOverride?: string,
-  ): Promise<string | null> {
+  // Set a lead's stage — used to Junk the losing side of an auto-merge.
+  async updateLeadStatus(leadId: string, statusId: string, creds: BitrixCreds): Promise<boolean> {
     try {
-      const deadline = new Date(Date.now() + deadlineHours * 3600 * 1000).toISOString();
-      const body = new URLSearchParams();
-      body.append('fields[TITLE]', titleOverride || `Follow up: ${leadName}`);
-      body.append('fields[DESCRIPTION]', descriptionOverride || `Please contact ${leadName} and update the lead status in Bitrix24 within ${deadlineHours} hours.`);
-      body.append('fields[RESPONSIBLE_ID]', assigneeUserId);
-      // NOTE: CREATED_BY is intentionally left unset so the task is created by the
-      // webhook/integration account. Setting it to another user makes Bitrix reject
-      // tasks.task.add unless that account has impersonation rights.
-      body.append('fields[DEADLINE]', deadline);
-      body.append('fields[UF_CRM_TASK][0]', `L_${leadId}`);
-      body.append('fields[ALLOW_CHANGE_DEADLINE]', 'N');
-
+      const body = new URLSearchParams({ id: leadId, 'fields[STATUS_ID]': statusId });
       if (creds.accessToken) body.append('auth', creds.accessToken);
-      const res = await fetch(this.bitrixUrl('tasks.task.add', creds), { method: 'POST', body });
+      const res = await fetch(this.bitrixUrl('crm.lead.update', creds), { method: 'POST', body });
       const data = (await res.json()) as any;
-      if (data.result?.task?.id) return String(data.result.task.id);
-      this.logger.warn(`createBitrixTask unexpected response: ${JSON.stringify(data)}`);
-      return null;
+      return data.result === true;
     } catch (err) {
-      this.logger.error(`createBitrixTask failed: ${(err as Error).message}`);
-      return null;
+      this.logger.error(`updateLeadStatus failed for #${leadId}: ${(err as Error).message}`);
+      return false;
     }
   }
 
-  // Add a user as an observer (auditor) on an existing Bitrix task.
-  async addTaskAuditor(taskId: string, userId: string, creds: BitrixCreds): Promise<boolean> {
+  // Timeline comment — used for the merge audit trail (no task, no rotation).
+  async addTimelineComment(leadId: string, comment: string, creds: BitrixCreds): Promise<boolean> {
     try {
       const body = new URLSearchParams();
-      body.append('taskId', taskId);
-      body.append('fields[AUDITORS][0]', userId);
+      body.append('fields[ENTITY_ID]', leadId);
+      body.append('fields[ENTITY_TYPE]', 'lead');
+      body.append('fields[COMMENT]', comment);
       if (creds.accessToken) body.append('auth', creds.accessToken);
-      const res = await fetch(this.bitrixUrl('tasks.task.update', creds), { method: 'POST', body });
+      const res = await fetch(this.bitrixUrl('crm.timeline.comment.add', creds), { method: 'POST', body });
       const data = (await res.json()) as any;
       return !data.error;
     } catch (err) {
-      this.logger.warn(`addTaskAuditor failed for task ${taskId}: ${(err as Error).message}`);
+      this.logger.warn(`addTimelineComment failed for #${leadId}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  // Native Bitrix24 in-app notification (bell icon + activity stream), used
+  // alongside WhatsApp so an agent is alerted even without WhatsApp configured.
+  async sendBitrixNotification(userId: string, message: string, creds: BitrixCreds): Promise<boolean> {
+    if (!userId) return false;
+    try {
+      const body = new URLSearchParams({ 'fields[USER_ID]': userId, 'fields[MESSAGE]': message });
+      if (creds.accessToken) body.append('auth', creds.accessToken);
+      const res = await fetch(this.bitrixUrl('im.notify.personal.add', creds), { method: 'POST', body });
+      const data = (await res.json()) as any;
+      return !data.error;
+    } catch (err) {
+      this.logger.warn(`sendBitrixNotification failed for user ${userId}: ${(err as Error).message}`);
       return false;
     }
   }
@@ -622,8 +709,8 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     team: string | undefined,
     creds: BitrixCreds,
     force = false,
-    targetAgent?: any,
-  ): Promise<{ success: boolean; agent?: any; taskId?: string | null; skipped?: boolean; queued?: boolean; message?: string }> {
+    opts: { skipHoursCheck?: boolean } = {},
+  ): Promise<{ success: boolean; agent?: any; skipped?: boolean; queued?: boolean; message?: string }> {
     const settings = await this.getSettings();
 
     if (settings.WORKFLOW_ENABLED !== 'true') {
@@ -641,25 +728,20 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     this.activeAssignments.add(cleanLeadId);
 
     try {
-      // Idempotency guard. A lead already logged for this exact agent must never
-      // produce a second task/WhatsApp/log row — no matter how we got here (a
-      // retried webhook delivery, or a Bitrix ONCRMLEADUPDATE event that merely
-      // touches an already-assigned lead rather than genuinely reassigning it,
-      // e.g. the round-robin's own crm.lead.update firing back through
-      // handleLeadChangeWebhook). This check runs even when force=true, since
-      // force is meant to bypass routing checks (hours/duplicate/source), not
-      // idempotency.
+      // Idempotency guard. A lead already logged must never produce a second
+      // WhatsApp/log row when nothing has actually changed — no matter how we
+      // got here (a retried webhook delivery, or a Bitrix ONCRMLEADUPDATE event
+      // that merely touches an already-assigned lead rather than genuinely
+      // reassigning it). Bypassed by force=true, and irrelevant once the lead
+      // is being manually reassigned (that path goes through
+      // handleLeadChangeWebhook → assignToAgent directly, not here).
       const existingLog = await this.assignmentLog.findFirst({
         where: { lead_id: cleanLeadId },
         orderBy: { assigned_at: 'desc' },
       });
-      if (existingLog) {
-        const targetId = targetAgent ? (targetAgent.id || 'manual-assignee') : null;
-        const alreadyOnTarget = targetId ? existingLog.agent_id === targetId : !force;
-        if (alreadyOnTarget) {
-          this.logger.log(`Lead #${cleanLeadId} is already assigned to ${existingLog.agent_name}. Skipping duplicate assignment.`);
-          return { success: true, skipped: true, message: `Lead already assigned to ${existingLog.agent_name}` };
-        }
+      if (existingLog && !force) {
+        this.logger.log(`Lead #${cleanLeadId} is already assigned to ${existingLog.agent_name}. Skipping duplicate assignment.`);
+        return { success: true, skipped: true, message: `Lead already assigned to ${existingLog.agent_name}` };
       }
 
       // Already flagged as a duplicate on a previous pass (e.g. a retried
@@ -677,6 +759,13 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // Fetch lead details up front — needed for routing and escalation messaging.
       const lead = await this.fetchLeadDetails(cleanLeadId, creds);
 
+      // Self-created leads (agent made the lead themselves, flagged by Source)
+      // never enter the workflow — left exactly as Bitrix set them up.
+      if (!force && this.isSelfCreatedSource(lead.sourceId, settings)) {
+        this.logger.log(`Lead #${cleanLeadId} skipped — self-created source "${lead.sourceId}"`);
+        return { success: true, skipped: true, message: `Self-created lead (source "${lead.sourceId}") — left as-is` };
+      }
+
       // Skip sources outside the allow-list (empty list = all allowed)
       if (!force && !this.isSourceAllowed(lead.sourceId, settings)) {
         this.logger.log(`Lead #${cleanLeadId} skipped — source "${lead.sourceId}" is not allowed`);
@@ -690,27 +779,32 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       // single global team.
       const resolvedTeam = (team ? team.trim() : '') || this.resolveTeamForSource(lead.sourceId, settings);
 
-      const slaHours = parseInt(settings.SLA_HOURS || '24', 10);
+      const slaMinutes = parseInt(settings.SLA_MINUTES || '60', 10);
 
-      // Directed re-assignment (e.g. the Escalation Manager picked a rep) — assign
-      // straight to that agent and (re)start their follow-up workflow.
-      if (targetAgent) {
-        return this.assignToAgent(cleanLeadId, lead, targetAgent, resolvedTeam, slaHours, settings, creds, 'manager reassignment');
+      // Out of business hours → queue it. Processed through this exact same
+      // pipeline (self-created / duplicate / round-robin, all still apply) the
+      // moment the next business window opens — see CronService + processAllLateLeads.
+      if (!force && !opts.skipHoursCheck && !this.isWithinBusinessHours(settings)) {
+        await this.storeLateLeadIfAbsent(cleanLeadId);
+        this.logger.log(`Lead #${cleanLeadId} queued — outside business hours`);
+        return { success: true, queued: true, message: 'Outside business hours — queued for the next working window' };
       }
 
-      // ── Routing — the Escalation Manager is the catch-all. Anything that can't be
-      // cleanly round-robin assigned to an active agent goes to the Manager. ──
-
-      // Out of business hours → Manager immediately.
-      if (!force && !this.isWithinBusinessHours(settings)) {
-        return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, 'arrived outside business hours', settings, creds);
-      }
-
-      // Duplicate guardrail — flagged, left unassigned, not sent to the
-      // manager either. A human reviews it from the Duplicates page.
+      // ── Duplicate guardrail — a same-customer lead that already exists. ──
       if (!force) {
         const duplicates = await this.findGuardrailDuplicates(cleanLeadId, lead, creds);
         if (duplicates.length > 0) {
+          // Phone/email match is high-confidence enough to auto-merge without a
+          // human. A bare name+recency match is weaker and still goes to the
+          // Duplicates page for manual review.
+          const strong = duplicates.filter((d) => d.matchedFields.some((f) => f.startsWith('phone') || f.startsWith('email')));
+          if (strong.length > 0) {
+            const merged = await this.autoMergeDuplicate(cleanLeadId, lead, resolvedTeam, strong, creds);
+            if (merged) return merged;
+            // autoMergeDuplicate returns null when the survivor is already closed —
+            // fall through to flagging for manual review instead of silently burying
+            // a genuine re-engagement inside a dead lead.
+          }
           return this.flagAsDuplicate(cleanLeadId, lead, resolvedTeam, duplicates);
         }
       }
@@ -720,66 +814,119 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return this.withTeamLock(resolvedTeam, async () => {
         const agent = await this.pickNextAgent(resolvedTeam);
         if (!agent) {
-          return this.escalateToManager(cleanLeadId, lead, resolvedTeam, slaHours, `no active agents in team "${resolvedTeam}"`, settings, creds);
+          return this.escalateToManager(cleanLeadId, lead, resolvedTeam, `no active agents in team "${resolvedTeam}"`, settings, creds);
         }
-        return this.assignToAgent(cleanLeadId, lead, agent, resolvedTeam, slaHours, settings, creds, 'round-robin');
+        return this.assignToAgent(cleanLeadId, lead, agent, resolvedTeam, slaMinutes, settings, creds, 'round-robin');
       });
     } finally {
       this.activeAssignments.delete(cleanLeadId);
     }
   }
 
-  // Assign a lead to a specific agent: update Bitrix, create the follow-up task,
-  // log it, and send the WhatsApp alert. Used for round-robin and manager reassigns.
+  // Assign a lead to a specific agent: update Bitrix, (re)start its SLA rotation
+  // tracking, log it, and send the WhatsApp + Bitrix alerts. Used for round-robin,
+  // rotation timeouts, manager reassigns, and any other manual reassignment.
   private async assignToAgent(
     leadId: string, lead: LeadDetails, agent: any, team: string,
-    slaHours: number, settings: Record<string, string>, creds: BitrixCreds, reason: string,
+    slaMinutes: number, settings: Record<string, string>, creds: BitrixCreds, reason: string,
+    lapNumber = 1,
   ): Promise<any> {
-    const [, taskId] = await Promise.all([
-      this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds),
-      this.createBitrixTask(leadId, lead.name, agent.bitrix_user_id, creds, slaHours),
-    ]);
+    await this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds);
     await this.setKnownOwner(leadId, agent.bitrix_user_id);
-    const log = await this.assignmentLog.create({
-      data: { lead_id: leadId, agent_id: agent.id || 'manual-assignee', agent_name: agent.name, team },
+
+    await this.assignmentLog.upsert({
+      where: { lead_id_agent_id: { lead_id: leadId, agent_id: agent.id || 'manual-assignee' } },
+      update: {},
+      create: { lead_id: leadId, agent_id: agent.id || 'manual-assignee', agent_name: agent.name, team },
     });
-    let waNotified = false;
-    if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
-      waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaHours, lead.source);
-      if (waNotified) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
-    }
-    this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${reason}). Task: ${taskId}. WA: ${waNotified}`);
-    return { success: true, agent, taskId };
+
+    await this.leadRotation.upsert({
+      where: { lead_id: leadId },
+      update: {
+        team, current_agent_id: agent.id || 'manual-assignee', current_agent_name: agent.name,
+        assigned_at: new Date(), tried_agent_ids: JSON.stringify([agent.id || 'manual-assignee']),
+        lap_number: lapNumber, status: 'active',
+      },
+      create: {
+        lead_id: leadId, team, current_agent_id: agent.id || 'manual-assignee', current_agent_name: agent.name,
+        tried_agent_ids: JSON.stringify([agent.id || 'manual-assignee']), lap_number: lapNumber, status: 'active',
+      },
+    });
+
+    const waNotified = await this.notifyAgent(agent, lead, slaMinutes, settings, creds);
+    this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${reason}, lap ${lapNumber}). WA: ${waNotified}`);
+    return { success: true, agent };
   }
 
-  // Route a lead to the Escalation Manager (out-of-hours, duplicate, or no agent).
-  // The manager then sets the responsible person, which restarts the workflow via
-  // handleLeadChangeWebhook.
+  // Route a lead to the Escalation Manager (no active agents, or the rotation
+  // exhausted every lap with nobody acting). No SLA timer runs while it sits
+  // with the manager — it waits until they manually reassign it, which restarts
+  // tracking for the new rep via handleLeadChangeWebhook.
   private async escalateToManager(
-    leadId: string, lead: LeadDetails, team: string, slaHours: number,
+    leadId: string, lead: LeadDetails, team: string,
     reason: string, settings: Record<string, string>, creds: BitrixCreds,
   ): Promise<any> {
     const managerId = settings.WORKFLOW_MANAGER_ID || '1';
     const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
     this.logger.warn(`Lead #${leadId} ("${lead.name}") → Escalation Manager (${reason})`);
 
-    const [, taskId] = await Promise.all([
-      this.assignLeadInBitrix(leadId, managerId, creds),
-      this.createBitrixTask(
-        leadId, lead.name, managerId, creds, slaHours,
-        `⚠️ Needs assignment: ${lead.name}`,
-        `Lead "${lead.name}" (${lead.phone || 'no phone'}) ${reason}. Set the responsible person — the follow-up workflow starts automatically for them.`,
-      ),
-    ]);
+    await this.assignLeadInBitrix(leadId, managerId, creds);
     await this.setKnownOwner(leadId, managerId);
-    const log = await this.assignmentLog.create({
-      data: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
+
+    await this.assignmentLog.upsert({
+      where: { lead_id_agent_id: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager' } },
+      update: {},
+      create: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager', agent_name: manager?.name || `Manager #${managerId}`, team },
     });
-    if (settings.WHATSAPP_ENABLED === 'true' && manager?.whatsapp_phone) {
-      const ok = await this.whatsapp.sendLeadAssignedNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', slaHours, lead.source);
-      if (ok) await this.assignmentLog.update({ where: { id: log.id }, data: { wa_notified: true } });
+
+    await this.leadRotation.upsert({
+      where: { lead_id: leadId },
+      update: {
+        team, current_agent_id: manager?.id || 'escalation-manager', current_agent_name: manager?.name || `Manager #${managerId}`,
+        assigned_at: new Date(), status: 'escalated',
+      },
+      create: {
+        lead_id: leadId, team, current_agent_id: manager?.id || 'escalation-manager',
+        current_agent_name: manager?.name || `Manager #${managerId}`, tried_agent_ids: '[]', status: 'escalated',
+      },
+    });
+
+    let waNotified = false;
+    if (manager) {
+      waNotified = await this.notifyEscalation(manager, lead, reason, settings, creds);
     }
-    return { success: true, agent: manager, taskId, message: reason };
+    return { success: true, agent: manager, message: reason, waNotified };
+  }
+
+  // Sends the "assigned to you" (or "escalated to you") alert on both channels
+  // WhatsApp and Bitrix in-app notify — used by assignToAgent/notifyEscalation.
+  private async notifyAgent(
+    agent: any, lead: LeadDetails, slaMinutes: number,
+    settings: Record<string, string>, creds: BitrixCreds,
+  ): Promise<boolean> {
+    let waNotified = false;
+    if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
+      waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaMinutes, lead.source);
+    }
+    if (agent.bitrix_user_id) {
+      const msg = `New lead assigned: ${lead.name} (${lead.phone || 'no phone'}). You have ${slaMinutes} minutes to move it out of "New Lead" before it moves to the next agent.`;
+      await this.sendBitrixNotification(agent.bitrix_user_id, msg, creds);
+    }
+    return waNotified;
+  }
+
+  private async notifyEscalation(
+    manager: any, lead: LeadDetails, reason: string, settings: Record<string, string>, creds: BitrixCreds,
+  ): Promise<boolean> {
+    let waNotified = false;
+    if (settings.WHATSAPP_ENABLED === 'true' && manager.whatsapp_phone) {
+      waNotified = await this.whatsapp.sendEscalationNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', reason, lead.source);
+    }
+    if (manager.bitrix_user_id) {
+      const msg = `Lead escalated to you: ${lead.name} (${lead.phone || 'no phone'}). Reason: ${reason}. No auto-timer runs until you assign it to someone.`;
+      await this.sendBitrixNotification(manager.bitrix_user_id, msg, creds);
+    }
+    return waNotified;
   }
 
   // Duplicate guardrail matched — left unassigned on purpose. No Bitrix
@@ -808,6 +955,59 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return { success: true, skipped: true, message: `Flagged as duplicate of ${matchedLeadIds.join(', ')} — left unassigned` };
   }
 
+  // ─── Duplicate auto-merge (phone/email match) ──────────────────────────────
+  // Two leads from the same customer arriving via different channels (e.g.
+  // Facebook + Website) are merged automatically: the older lead survives
+  // untouched, the newer one is closed as Junk with a cross-reference note.
+  // Nothing is deleted — fully reversible by a human in Bitrix if needed.
+
+  // Bitrix lead IDs are sequential, so the lowest numeric ID is the oldest lead.
+  private pickMergeSurvivor(leadId: string, candidates: { leadId: string; matchedFields: string[] }[]): { leadId: string; matchedFields: string[] } {
+    return [...candidates, { leadId, matchedFields: [] }]
+      .sort((a, b) => Number(a.leadId) - Number(b.leadId))[0];
+  }
+
+  private async autoMergeDuplicate(
+    leadId: string, lead: LeadDetails, team: string,
+    strongMatches: { leadId: string; matchedFields: string[] }[],
+    creds: BitrixCreds,
+  ): Promise<any | null> {
+    const survivor = this.pickMergeSurvivor(leadId, strongMatches);
+
+    // This lead is already the oldest of the group — nothing to merge it into.
+    if (survivor.leadId === leadId) return null;
+
+    const survivorDetails = await this.fetchLeadDetails(survivor.leadId, creds);
+    const closedStatuses = ['CONVERTED', 'JUNK'];
+    if (survivorDetails.statusId && closedStatuses.includes(survivorDetails.statusId)) {
+      this.logger.log(`Lead #${leadId} matched closed lead #${survivor.leadId} — not auto-merging, flagging for review instead`);
+      return null;
+    }
+
+    const fieldsList = survivor.matchedFields.join(', ');
+    await this.updateLeadStatus(leadId, 'JUNK', creds);
+    await Promise.all([
+      this.addTimelineComment(leadId, `Merged as duplicate of Lead #${survivor.leadId} — matched: ${fieldsList}.`, creds),
+      this.addTimelineComment(survivor.leadId, `Lead #${leadId} ("${lead.name}", source: ${lead.source}) was auto-merged into this lead as a duplicate — matched: ${fieldsList}.`, creds),
+    ]);
+
+    await this.mergedLead.upsert({
+      where: { lead_id: leadId },
+      update: { merged_into_lead_id: survivor.leadId, matched_fields: JSON.stringify(survivor.matchedFields), team },
+      create: {
+        lead_id: leadId, lead_name: lead.name, merged_into_lead_id: survivor.leadId,
+        team, matched_fields: JSON.stringify(survivor.matchedFields),
+      },
+    });
+
+    this.logger.log(`Lead #${leadId} ("${lead.name}") auto-merged into #${survivor.leadId} — matched: ${fieldsList}`);
+    return { success: true, skipped: true, message: `Auto-merged into Lead #${survivor.leadId} (matched: ${fieldsList})` };
+  }
+
+  async getMergedLeads(limit = 100) {
+    return this.mergedLead.findMany({ orderBy: { merged_at: 'desc' }, take: limit });
+  }
+
   // ─── Duplicate review queue ─────────────────────────────────────────────────
 
   async getDuplicates(resolved?: boolean) {
@@ -821,10 +1021,26 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return this.duplicateLead.update({ where: { id }, data: { resolved: true, resolved_at: new Date() } });
   }
 
-  // ─── Manager reassignment → restart the workflow for the new rep ───────────
-  // Fired by a Bitrix outbound webhook on lead update. When the Escalation Manager
-  // changes the responsible person to someone else, we (re)start the follow-up
-  // workflow (task + WhatsApp) for that new rep.
+  // Close a lead's active SLA rotation the instant it leaves the "new" stage —
+  // per the product rule, any stage change (forward, junk, or otherwise) counts
+  // as the agent having worked it. Runs regardless of who changed it or whether
+  // the owner also changed.
+  private async closeRotationIfStageChanged(leadId: string, lead: LeadDetails, settings: Record<string, string>): Promise<void> {
+    const newStatus = settings.NEW_LEAD_STATUS_ID || 'NEW';
+    if (!lead.statusId || lead.statusId === newStatus) return;
+    const row = await this.leadRotation.findUnique({ where: { lead_id: leadId } });
+    if (row && row.status === 'active') {
+      await this.leadRotation.update({ where: { lead_id: leadId }, data: { status: 'done' } });
+      this.logger.log(`Lead #${leadId} left "${newStatus}" stage (now "${lead.statusId}") — SLA rotation closed`);
+    }
+  }
+
+  // ─── Reassignment webhook → restart tracking for the new owner ─────────────
+  // Fired by a Bitrix outbound webhook on lead update (ONCRMLEADUPDATE). Any
+  // genuine change of responsible person — the Escalation Manager handing off,
+  // a team lead reassigning directly in Bitrix, or our own rotation-timeout
+  // reassignment looping back through — (re)starts the SLA rotation for
+  // whoever now holds it.
   async handleLeadChangeWebhook(payload: any): Promise<{ action: string; detail?: string }> {
     const settings = await this.getSettings();
     const creds = this.getWebhookCreds();
@@ -835,8 +1051,10 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const lead = await this.fetchLeadDetails(String(leadId), creds);
     const managerId = settings.WORKFLOW_MANAGER_ID || '1';
 
+    await this.closeRotationIfStageChanged(String(leadId), lead, settings);
+
     // Ignore events where the owner hasn't actually changed since we last saw
-    // it — e.g. the manager commenting on or editing a lead that's already
+    // it — e.g. someone commenting on or editing a lead that's already
     // correctly assigned. Without this, any such touch looks identical to a
     // deliberate reassignment and re-notifies the current owner, which is how
     // one lead could end up cycling through several agents with no real
@@ -846,40 +1064,43 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       return { action: 'ignored', detail: 'Owner unchanged since last observation' };
     }
 
-    // Only react when the Escalation Manager handed the lead to a different person.
-    if (lead.modifyById === managerId && lead.assignedById && lead.assignedById !== managerId) {
-      const repAgent = await this.agent.findFirst({ where: { bitrix_user_id: lead.assignedById } });
-      const team = (repAgent?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
-      const targetAgent = repAgent || {
-        id: 'manual-assignee', bitrix_user_id: lead.assignedById,
-        name: `Bitrix User #${lead.assignedById}`, whatsapp_phone: null, team,
-      };
-
-      this.logger.log(`Manager reassigned lead #${leadId} → ${targetAgent.name}. Restarting workflow.`);
-      const result = await this.processLeadAssignment(String(leadId), team, creds, true, targetAgent);
-
-      // Keep the Escalation Manager in the loop on escalated leads: add them as an
-      // observer on the rep's new follow-up task.
-      if (result?.taskId) {
-        await this.addTaskAuditor(String(result.taskId), managerId, creds);
-        this.logger.log(`Added manager (${managerId}) as observer on task ${result.taskId}`);
-      }
-
-      return { action: 'restarted', detail: `Workflow restarted for ${targetAgent.name}` };
+    if (!lead.assignedById || lead.assignedById === knownOwner) {
+      return { action: 'ignored', detail: 'No owner change detected' };
     }
 
-    // Owner changed but not via a manager handoff we act on (e.g. a rep
-    // reassigning peer-to-peer, or someone editing the lead directly in
-    // Bitrix) — still record the new owner so a later manager touch with no
-    // further change is correctly recognized as a no-op instead of
-    // re-triggering the workflow.
-    if (lead.assignedById) await this.setKnownOwner(String(leadId), lead.assignedById);
+    // Reassigned TO the Escalation Manager — hold with no SLA timer, same as
+    // any other escalation, until they hand it to someone.
+    if (lead.assignedById === managerId) {
+      await this.setKnownOwner(String(leadId), lead.assignedById);
+      const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
+      const team = (manager?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
+      await this.leadRotation.upsert({
+        where: { lead_id: String(leadId) },
+        update: { team, current_agent_id: manager?.id || 'escalation-manager', current_agent_name: manager?.name || `Manager #${managerId}`, assigned_at: new Date(), status: 'escalated' },
+        create: { lead_id: String(leadId), team, current_agent_id: manager?.id || 'escalation-manager', current_agent_name: manager?.name || `Manager #${managerId}`, tried_agent_ids: '[]', status: 'escalated' },
+      });
+      return { action: 'escalated', detail: 'Reassigned to Escalation Manager — SLA tracking paused' };
+    }
 
-    return { action: 'ignored', detail: 'Not a manager reassignment' };
+    // Reassigned to any known agent in the roster — (re)start their SLA rotation.
+    const repAgent = await this.agent.findFirst({ where: { bitrix_user_id: lead.assignedById } });
+    if (!repAgent) {
+      // Reassigned to someone outside our agent roster — nothing we can track
+      // (no WhatsApp/notify target on file). Just record the new owner.
+      await this.setKnownOwner(String(leadId), lead.assignedById);
+      return { action: 'ignored', detail: 'Reassigned to a user outside the agent roster' };
+    }
+
+    const team = (repAgent.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
+    const slaMinutes = parseInt(settings.SLA_MINUTES || '60', 10);
+    this.logger.log(`Lead #${leadId} manually reassigned → ${repAgent.name}. Restarting SLA rotation.`);
+    await this.assignToAgent(String(leadId), lead, repAgent, team, slaMinutes, settings, creds, 'manual reassignment');
+
+    return { action: 'restarted', detail: `SLA rotation restarted for ${repAgent.name}` };
   }
 
-  // ─── GAP 1: Cron — Process all queued late leads ──────────────────────────
-  // Called by CronService at WORKFLOW_START_TIME every enabled day
+  // ─── Cron — Process all queued off-hours leads ─────────────────────────────
+  // Called by CronService the moment each configured business-hours window opens
 
   async processAllLateLeads(): Promise<{ processed: number; skipped: number; failed: number }> {
     const leads = await this.getLateLeads();
@@ -901,7 +1122,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     for (const lateLead of leads) {
       try {
-        const result = await this.processLeadAssignment(lateLead.lead_id, undefined, creds, true);
+        // skipHoursCheck (not force): we're intentionally draining the queue now
+        // that the business window is open, but self-created/source/duplicate
+        // checks must still run — force would bypass those too.
+        const result = await this.processLeadAssignment(lateLead.lead_id, undefined, creds, false, { skipHoursCheck: true });
+        await this.lateLead.update({ where: { lead_id: lateLead.lead_id }, data: { processed: true, processed_at: new Date() } });
         if (result.skipped) skipped++;
         else if (result.success) processed++;
         else failed++;
@@ -913,6 +1138,100 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     this.logger.log(`Cron done — processed: ${processed}, skipped: ${skipped}, failed: ${failed}`);
     return { processed, skipped, failed };
+  }
+
+  // ─── SLA rotation sweep — called by CronService every couple of minutes ────
+  // For every lead still actively rotating: close it out if it silently caught
+  // up to the current stage already (belt-and-suspenders alongside the webhook),
+  // otherwise reassign once SLA_MINUTES of business time have elapsed with no
+  // movement. Walks the *live* team roster each time, so adding/removing an
+  // agent in the frontend takes effect on the very next tick.
+
+  async getActiveRotations() {
+    return this.leadRotation.findMany({ where: { status: 'active' }, orderBy: { assigned_at: 'asc' } });
+  }
+
+  async sweepRotationTimeouts(): Promise<{ checked: number; rotated: number; escalated: number }> {
+    const settings = await this.getSettings();
+    if (settings.WORKFLOW_ENABLED !== 'true') return { checked: 0, rotated: 0, escalated: 0 };
+
+    const schedule = this.getBusinessHoursSchedule(settings);
+    const slaMinutes = parseInt(settings.SLA_MINUTES || '60', 10);
+    const maxLaps = parseInt(settings.MAX_ROTATION_LAPS || '2', 10);
+    const creds = this.getWebhookCreds();
+
+    const rotations = await this.getActiveRotations();
+    let rotated = 0, escalated = 0;
+
+    for (const row of rotations) {
+      const elapsed = this.businessMinutesElapsed(row.assigned_at, new Date(), schedule);
+      if (elapsed < slaMinutes) continue;
+
+      try {
+        const advanced = await this.advanceRotation(row, settings, schedule, slaMinutes, maxLaps, creds);
+        if (advanced === 'escalated') escalated++;
+        else if (advanced === 'rotated') rotated++;
+      } catch (err) {
+        this.logger.error(`sweepRotationTimeouts: failed to advance lead #${row.lead_id}: ${(err as Error).message}`);
+      }
+    }
+
+    if (rotated || escalated) {
+      this.logger.log(`SLA sweep — checked: ${rotations.length}, rotated: ${rotated}, escalated: ${escalated}`);
+    }
+    return { checked: rotations.length, rotated, escalated };
+  }
+
+  private async advanceRotation(
+    row: any, settings: Record<string, string>, schedule: Record<string, { start: string; end: string }>,
+    slaMinutes: number, maxLaps: number, creds: BitrixCreds,
+  ): Promise<'rotated' | 'escalated' | 'skipped'> {
+    // The stage may have changed since the last webhook without us catching it
+    // (a missed/late delivery) — double-check directly against Bitrix before
+    // reassigning out from under an agent who already did the work.
+    const lead = await this.fetchLeadDetails(row.lead_id, creds);
+    const newStatus = settings.NEW_LEAD_STATUS_ID || 'NEW';
+    if (lead.statusId && lead.statusId !== newStatus) {
+      await this.leadRotation.update({ where: { id: row.id }, data: { status: 'done' } });
+      return 'skipped';
+    }
+
+    const deptFilter: string[] = (() => { try { return JSON.parse(settings.ELIGIBLE_DEPT_IDS || '[]'); } catch { return []; } })();
+    const roster = await this.agent.findMany({
+      where: { team: row.team, is_active: true, ...(deptFilter.length > 0 ? { department_id: { in: deptFilter } } : {}) },
+      orderBy: [{ sort_order: 'asc' }, { created_at: 'asc' }],
+    });
+
+    if (roster.length === 0) {
+      await this.escalateToManager(row.lead_id, lead, row.team, 'no active agents left in team', settings, creds);
+      return 'escalated';
+    }
+
+    let tried: string[] = [];
+    try { tried = JSON.parse(row.tried_agent_ids || '[]'); } catch {}
+
+    const currentIdx = roster.findIndex((a) => a.id === row.current_agent_id);
+    const orderedFromCurrent = currentIdx >= 0
+      ? [...roster.slice(currentIdx + 1), ...roster.slice(0, currentIdx + 1)]
+      : roster;
+    const next = orderedFromCurrent.find((a) => !tried.includes(a.id));
+
+    if (next) {
+      tried.push(next.id);
+      await this.leadRotation.update({ where: { id: row.id }, data: { tried_agent_ids: JSON.stringify(tried) } });
+      await this.assignToAgent(row.lead_id, lead, next, row.team, slaMinutes, settings, creds, `SLA timeout (lap ${row.lap_number})`, row.lap_number);
+      return 'rotated';
+    }
+
+    // Every active agent has had a turn this lap.
+    if (row.lap_number < maxLaps) {
+      const first = roster[0];
+      await this.assignToAgent(row.lead_id, lead, first, row.team, slaMinutes, settings, creds, 'starting next rotation lap', row.lap_number + 1);
+      return 'rotated';
+    }
+
+    await this.escalateToManager(row.lead_id, lead, row.team, `exhausted ${maxLaps} full rotation laps with no action`, settings, creds);
+    return 'escalated';
   }
 
   // ─── Dashboard Status (combined snapshot for the UI) ────────────────────────

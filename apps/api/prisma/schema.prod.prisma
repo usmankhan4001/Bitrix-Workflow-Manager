@@ -35,15 +35,6 @@ model AssignmentLog {
   @@unique([lead_id, agent_id])
 }
 
-model CompletedQueue {
-  id          String   @id @default(uuid())
-  agent_id    String
-  agent_name  String
-  team        String
-  lead_id     String
-  queued_at   DateTime @default(now())
-}
-
 model WorkflowSetting {
   id         String   @id @default(uuid())
   key        String   @unique
@@ -69,9 +60,10 @@ model LeadOwner {
   updated_at     DateTime @updatedAt
 }
 
-// Leads flagged by the duplicate guardrail. Left unassigned in Bitrix on
-// purpose — no agent, no manager, no task, no WhatsApp — for a human to
-// review from the Duplicates page instead of being auto-routed anywhere.
+// Leads flagged by the duplicate guardrail on a weak signal only (name+recency,
+// no phone/email match). Left unassigned in Bitrix on purpose — no agent, no
+// manager, no WhatsApp — for a human to review from the Duplicates page instead
+// of being auto-routed or auto-merged.
 model DuplicateLead {
   id               String    @id @default(uuid())
   lead_id          String    @unique
@@ -82,4 +74,37 @@ model DuplicateLead {
   detected_at      DateTime  @default(now())
   resolved         Boolean   @default(false)
   resolved_at      DateTime?
+}
+
+// Audit trail for leads auto-merged on a phone/email match: the newer lead
+// (lead_id) was set to Junk in Bitrix and folded into the older surviving
+// lead (merged_into_lead_id), with no human review needed.
+model MergedLead {
+  id                  String   @id @default(uuid())
+  lead_id             String   @unique
+  lead_name           String
+  merged_into_lead_id String
+  team                String
+  matched_fields      String   // JSON array: phone, email, phone (via contact), ...
+  merged_at           DateTime @default(now())
+}
+
+// Stage-based SLA tracking that replaces the old Bitrix-task system. One row
+// per lead currently moving through the workflow: tracks who holds it, since
+// when, and which agents in the team have already had a turn this lap. The
+// cron sweep (CronService.sweepRotationTimeouts) reassigns to the next agent
+// once SLA_MINUTES of business time elapse with the lead still in the "new"
+// stage, and ONCRMLEADUPDATE closes the row the instant the stage changes.
+model LeadRotation {
+  id                 String   @id @default(uuid())
+  lead_id            String   @unique
+  team               String
+  current_agent_id   String   // Agent.id, or "escalation-manager"
+  current_agent_name String
+  assigned_at        DateTime @default(now())
+  tried_agent_ids    String   // JSON array of Agent.id already given this lead in the current lap
+  lap_number         Int      @default(1)
+  status             String   @default("active") // active | done | escalated
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 }

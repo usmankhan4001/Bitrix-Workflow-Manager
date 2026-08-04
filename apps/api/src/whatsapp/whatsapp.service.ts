@@ -74,10 +74,10 @@ export class WhatsappService {
     agentName: string,
     leadName: string,
     leadContact: string,
-    slaHours: number,
+    slaMinutes: number,
     source = '',
   ): Promise<boolean> {
-    const deadline = new Date(Date.now() + slaHours * 3600 * 1000);
+    const deadline = new Date(Date.now() + slaMinutes * 60 * 1000);
     const deadlineStr = deadline.toLocaleString('en-GB', {
       timeZone: 'Asia/Karachi',
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true,
@@ -89,10 +89,31 @@ export class WhatsappService {
       `📋 Lead: ${leadName}\n` +
       `📞 Contact: ${leadContact || 'N/A'}\n` +
       `🌐 Source: ${source || 'N/A'}\n` +
-      `⏰ Complete within: ${slaHours} hours (by ${deadlineStr})\n\n` +
+      `⏰ Move it out of "New Lead" within: ${slaMinutes} minutes (by ${deadlineStr}) or it moves to the next agent\n\n` +
       `Please follow up and update the lead in Bitrix24.`;
 
     return this.sendText(agentPhone, text);
+  }
+
+  /** Notify the Escalation Manager that a lead has landed with them. */
+  async sendEscalationNotification(
+    managerPhone: string,
+    managerName: string,
+    leadName: string,
+    leadContact: string,
+    reason: string,
+    source = '',
+  ): Promise<boolean> {
+    const text =
+      `🔴 *Lead escalated to you*\n\n` +
+      `👤 Manager: ${managerName}\n` +
+      `📋 Lead: ${leadName}\n` +
+      `📞 Contact: ${leadContact || 'N/A'}\n` +
+      `🌐 Source: ${source || 'N/A'}\n` +
+      `⚠️ Reason: ${reason}\n\n` +
+      `No auto-timer runs until you assign it to someone in Bitrix24.`;
+
+    return this.sendText(managerPhone, text);
   }
 
   /** Connectivity check for the dashboard "Test" button. */

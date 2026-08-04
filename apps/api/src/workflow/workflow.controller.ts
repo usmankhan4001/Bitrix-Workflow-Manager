@@ -76,6 +76,19 @@ export class WorkflowController {
     return this.workflowService.resolveDuplicate(id);
   }
 
+  @Get('merged-leads')
+  getMergedLeads(@Query('limit') limit?: string) {
+    return this.workflowService.getMergedLeads(limit ? parseInt(limit, 10) : 100);
+  }
+
+  // ─── SLA Rotations (live "who's holding what, since when") ────────────────
+
+  @Get('rotations')
+  getActiveRotations() { return this.workflowService.getActiveRotations(); }
+
+  @Post('rotations/sweep')
+  sweepRotations() { return this.workflowService.sweepRotationTimeouts(); }
+
   // ─── Workflow Status (dashboard snapshot) ──────────────────────────────────
 
   @Get('status')
@@ -124,7 +137,7 @@ export class WorkflowController {
     );
   }
 
-  // ─── GAP 1: Manual cron trigger (useful for testing / recovery) ─────────────
+  // ─── Manual cron trigger (useful for testing / recovery) ───────────────────
 
   @Post('process-late-leads')
   async processLateLeads() {
@@ -137,8 +150,9 @@ export class WorkflowController {
   }
 
   // ─── Bitrix24 Inbound Webhook (Lead Change) ───────────────────────────────
-  // Fired on lead update. When the Escalation Manager reassigns a lead to a rep,
-  // this restarts the follow-up workflow (task + WhatsApp) for that rep.
+  // Fired on lead update (ONCRMLEADUPDATE). Closes the SLA rotation when a lead
+  // leaves the "New Lead" stage, and restarts it for whoever a lead is manually
+  // reassigned to (WhatsApp + Bitrix in-app alert).
 
   @Post('webhook/lead-change')
   async leadChangeWebhook(@Body() payload: any) {

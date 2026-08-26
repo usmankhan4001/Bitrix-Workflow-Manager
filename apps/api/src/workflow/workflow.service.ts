@@ -53,15 +53,17 @@ interface BitrixCreds {
 }
 
 // One holding period in the Bitrix-visible assignment history (ASSIGNMENT_HISTORY_FIELD).
-// left_at/outcome are null while this entry is the current holder.
+// Keys kept short on purpose to save space in the field: uid = bitrix_user_id
+// (the agent's name/our internal id are both dropped — uid alone identifies
+// them in Bitrix), lap = rotation lap (0 for the Escalation Manager), asg =
+// when they got it, end/res = when + why they stopped holding it (null while
+// they're still the current holder).
 interface AssignmentHistoryEntry {
-  agent_id: string;
-  agent_name: string;
-  bitrix_user_id: string;
-  lap: number; // 0 for the Escalation Manager, since laps don't apply to them
-  assigned_at: string; // Asia/Karachi, ISO 8601 with +05:00 offset
-  left_at: string | null;
-  outcome: 'worked' | 'missed' | 'manual_reassigned' | null;
+  uid: string;
+  lap: number;
+  asg: string; // Asia/Karachi, ISO 8601, no timezone marker
+  end: string | null;
+  res: 'worked' | 'missed' | 'manual_reassigned' | null;
 }
 
 @Injectable()
@@ -741,7 +743,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // apart, so this is a low-probability edge case, not a correctness guarantee.
   private async recordAssignmentHandoff(
     leadId: string,
-    newHolder: { id: string; name: string; bitrix_user_id: string } | null,
+    newHolderBitrixUserId: string | null,
     lap: number,
     previousOutcome: 'worked' | 'missed' | 'manual_reassigned' | null,
     settings: Record<string, string>,
@@ -759,20 +761,12 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const history = await this.readAssignmentHistory(leadId, fieldCode, creds);
     const open = history[history.length - 1];
     const now = this.toKarachiISOString(new Date());
-    if (open && !open.left_at) {
-      open.left_at = now;
-      open.outcome = previousOutcome;
+    if (open && !open.end) {
+      open.end = now;
+      open.res = previousOutcome;
     }
-    if (newHolder) {
-      history.push({
-        agent_id: newHolder.id,
-        agent_name: newHolder.name,
-        bitrix_user_id: newHolder.bitrix_user_id,
-        lap,
-        assigned_at: now,
-        left_at: null,
-        outcome: null,
-      });
+    if (newHolderBitrixUserId) {
+      history.push({ uid: newHolderBitrixUserId, lap, asg: now, end: null, res: null });
     }
     const ok = await this.writeAssignmentHistory(leadId, history, fieldCode, creds);
     if (ok) {
@@ -964,11 +958,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   ): Promise<any> {
     await this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds);
     await this.setKnownOwner(leadId, agent.bitrix_user_id);
-    await this.recordAssignmentHandoff(
-      leadId,
-      { id: agent.id || 'manual-assignee', name: agent.name, bitrix_user_id: agent.bitrix_user_id },
-      lapNumber, previousOutcome, settings, creds,
-    );
+    await this.recordAssignmentHandoff(leadId, agent.bitrix_user_id, lapNumber, previousOutcome, settings, creds);
 
     await this.assignmentLog.upsert({
       where: { lead_id_agent_id: { lead_id: leadId, agent_id: agent.id || 'manual-assignee' } },
@@ -1009,11 +999,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     await this.assignLeadInBitrix(leadId, managerId, creds);
     await this.setKnownOwner(leadId, managerId);
-    await this.recordAssignmentHandoff(
-      leadId,
-      { id: manager?.id || 'escalation-manager', name: manager?.name || `Manager #${managerId}`, bitrix_user_id: managerId },
-      0, previousOutcome, settings, creds,
-    );
+    await this.recordAssignmentHandoff(leadId, managerId, 0, previousOutcome, settings, creds);
 
     await this.assignmentLog.upsert({
       where: { lead_id_agent_id: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager' } },
@@ -1233,11 +1219,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       await this.setKnownOwner(String(leadId), lead.assignedById);
       const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
       const team = (manager?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
-      await this.recordAssignmentHandoff(
-        String(leadId),
-        { id: manager?.id || 'escalation-manager', name: manager?.name || `Manager #${managerId}`, bitrix_user_id: managerId },
-        0, 'manual_reassigned', settings, creds,
-      );
+      await this.recordAssignmentHandoff(String(leadId), managerId, 0, 'manual_reassigned', settings, creds);
       await this.leadRotation.upsert({
         where: { lead_id: String(leadId) },
         update: { team, current_agent_id: manager?.id || 'escalation-manager', current_agent_name: manager?.name || `Manager #${managerId}`, assigned_at: new Date(), status: 'escalated' },

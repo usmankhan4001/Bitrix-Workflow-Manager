@@ -1192,6 +1192,10 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const creds = this.getWebhookCreds();
 
     const leadId = payload?.data?.FIELDS?.ID || payload?.FIELDS?.ID || payload?.lead_id || '';
+    // Logged unconditionally on arrival — this is the only way to tell "Bitrix
+    // never called this webhook" (nothing here at all) apart from "it called us
+    // but we couldn't find a lead ID in the payload shape it sent."
+    this.logger.log(`handleLeadChangeWebhook fired — leadId=${leadId || '(none found)'} payload=${JSON.stringify(payload).slice(0, 500)}`);
     if (!leadId) return { action: 'ignored', detail: 'No lead ID in payload' };
 
     const lead = await this.fetchLeadDetails(String(leadId), creds);

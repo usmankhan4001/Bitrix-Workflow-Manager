@@ -739,7 +739,14 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     creds: BitrixCreds,
   ): Promise<void> {
     const fieldCode = settings.ASSIGNMENT_HISTORY_FIELD;
-    if (!fieldCode) return;
+    if (!fieldCode) {
+      // Previously a silent no-op — indistinguishable from "it worked" in the
+      // logs. This setting only self-seeds on the first boot after it was
+      // introduced; an existing deployment that already had a WorkflowSetting
+      // table won't get it for free, so this is worth surfacing loudly.
+      this.logger.warn(`recordAssignmentHandoff skipped for #${leadId} — ASSIGNMENT_HISTORY_FIELD setting is empty/unset`);
+      return;
+    }
     const history = await this.readAssignmentHistory(leadId, fieldCode, creds);
     const open = history[history.length - 1];
     const now = this.toKarachiISOString(new Date());
@@ -758,7 +765,10 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         outcome: null,
       });
     }
-    await this.writeAssignmentHistory(leadId, history, fieldCode, creds);
+    const ok = await this.writeAssignmentHistory(leadId, history, fieldCode, creds);
+    if (ok) {
+      this.logger.log(`Assignment history updated for #${leadId} (${fieldCode}) — ${history.length} entr${history.length === 1 ? 'y' : 'ies'}`);
+    }
   }
 
   // Native Bitrix24 in-app notification (bell icon + activity stream), used

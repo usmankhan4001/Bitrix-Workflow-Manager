@@ -5,6 +5,13 @@ import { WorkflowService } from '../workflow/workflow.service';
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
+  // @Cron gives no protection against overlapping runs on its own — if a run
+  // takes longer than the tick interval (easy once Bitrix starts throttling
+  // requests), the next tick fires on top of it, and both process the same
+  // stale rows concurrently. These flags make each job skip a tick rather
+  // than double up.
+  private processingLateLeads = false;
+  private sweepingRotations = false;
 
   constructor(private readonly workflow: WorkflowService) {}
 
@@ -15,6 +22,10 @@ export class CronService {
    */
   @Cron('* * * * *') // every minute
   async maybeProcessLateLeads() {
+    if (this.processingLateLeads) {
+      this.logger.warn('Day-start cron tick skipped — previous run is still in progress');
+      return;
+    }
     const settings = await this.workflow.getSettings();
 
     // Check if we're in the 1-minute window at the start of today's business hours
@@ -23,9 +34,14 @@ export class CronService {
     const pending = await this.workflow.getLateLeads();
     if (pending.length === 0) return;
 
-    this.logger.log(`⏰ Day-start cron triggered — ${pending.length} queued lead(s) to process`);
-    const result = await this.workflow.processAllLateLeads();
-    this.logger.log(`✅ Cron complete — processed: ${result.processed}, skipped: ${result.skipped}, failed: ${result.failed}`);
+    this.processingLateLeads = true;
+    try {
+      this.logger.log(`⏰ Day-start cron triggered — ${pending.length} queued lead(s) to process`);
+      const result = await this.workflow.processAllLateLeads();
+      this.logger.log(`✅ Cron complete — processed: ${result.processed}, skipped: ${result.skipped}, failed: ${result.failed}`);
+    } finally {
+      this.processingLateLeads = false;
+    }
   }
 
   private isStartOfDay(settings: Record<string, string>): boolean {
@@ -47,9 +63,18 @@ export class CronService {
    */
   @Cron('*/2 * * * *')
   async sweepRotationTimeouts() {
-    const result = await this.workflow.sweepRotationTimeouts();
-    if (result.rotated || result.escalated) {
-      this.logger.log(`⏱️ SLA sweep — checked: ${result.checked}, rotated: ${result.rotated}, escalated: ${result.escalated}`);
+    if (this.sweepingRotations) {
+      this.logger.warn('SLA sweep tick skipped — previous run is still in progress');
+      return;
+    }
+    this.sweepingRotations = true;
+    try {
+      const result = await this.workflow.sweepRotationTimeouts();
+      if (result.rotated || result.escalated) {
+        this.logger.log(`⏱️ SLA sweep — checked: ${result.checked}, rotated: ${result.rotated}, escalated: ${result.escalated}`);
+      }
+    } finally {
+      this.sweepingRotations = false;
     }
   }
 }

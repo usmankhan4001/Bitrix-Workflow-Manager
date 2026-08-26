@@ -712,27 +712,9 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         this.logger.warn(`writeAssignmentHistory for #${leadId} did not confirm: ${JSON.stringify(data)}`);
         return false;
       }
-
-      // crm.lead.update can report result:true for the whole call while Bitrix
-      // silently drops one specific field it rejected (wrong entity scope,
-      // field permissions, etc) — reading straight back makes that visible in
-      // the logs instead of trusting the update call's own report.
-      try {
-        const sep = this.bitrixUrl('crm.lead.get', creds).includes('?') ? '&' : '?';
-        const verifyRes = await fetch(`${this.bitrixUrl('crm.lead.get', creds)}${sep}id=${leadId}`);
-        const verifyData = (await verifyRes.json()) as any;
-        if (!('result' in verifyData) || !verifyData.result) {
-          this.logger.warn(`writeAssignmentHistory verify for #${leadId}: crm.lead.get returned no result — ${JSON.stringify(verifyData).slice(0, 300)}`);
-        } else if (!(fieldCode in verifyData.result)) {
-          this.logger.warn(`writeAssignmentHistory verify for #${leadId}: "${fieldCode}" is not present on the Lead entity at all — check the field was created under Leads specifically, not Deals/Contacts/Companies`);
-        } else {
-          const stored = verifyData.result[fieldCode];
-          this.logger.log(`writeAssignmentHistory verify for #${leadId} (${fieldCode}): ${stored === null ? 'null (write did not stick)' : JSON.stringify(stored).slice(0, 500)}`);
-        }
-      } catch (verifyErr) {
-        this.logger.warn(`writeAssignmentHistory verify-read failed for #${leadId}: ${(verifyErr as Error).message}`);
-      }
-
+      // (A read-back verification lived here temporarily to debug the custom
+      // field write — removed now that it's confirmed working, since it cost
+      // an extra Bitrix call on every single handoff.)
       return true;
     } catch (err) {
       this.logger.warn(`writeAssignmentHistory failed for #${leadId}: ${(err as Error).message}`);
@@ -1310,10 +1292,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         this.logger.error(`Cron: failed to process lead #${lateLead.lead_id}: ${(err as Error).message}`);
         failed++;
       }
+      // Each lead can fire several Bitrix REST calls (assign, history, notify).
+      // A queue of many leads processed back-to-back with no spacing is exactly
+      // what trips Bitrix's QUERY_LIMIT_EXCEEDED — this paces it out.
+      await this.sleep(500);
     }
 
     this.logger.log(`Cron done — processed: ${processed}, skipped: ${skipped}, failed: ${failed}`);
     return { processed, skipped, failed };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // ─── SLA rotation sweep — called by CronService every couple of minutes ────
@@ -1347,6 +1337,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         const advanced = await this.advanceRotation(row, settings, schedule, slaMinutes, maxLaps, creds);
         if (advanced === 'escalated') escalated++;
         else if (advanced === 'rotated') rotated++;
+        // Same reasoning as processAllLateLeads: several Bitrix calls per
+        // reassignment, and a batch of leads all timing out in the same tick
+        // (e.g. right after a low SLA_MINUTES test setting) must not fire them
+        // all in one burst.
+        if (advanced !== 'skipped') await this.sleep(500);
       } catch (err) {
         this.logger.error(`sweepRotationTimeouts: failed to advance lead #${row.lead_id}: ${(err as Error).message}`);
       }

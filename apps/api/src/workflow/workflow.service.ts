@@ -336,7 +336,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // trailing "Z" is then relabeled "+05:00" since that's the true offset, not UTC.
   private toKarachiISOString(date: Date): string {
     const shifted = new Date(date.getTime() + 5 * 3600 * 1000);
-    return shifted.toISOString().replace('Z', '+05:00');
+    return shifted.toISOString().replace('Z', '');
   }
 
   // ─── Self-created leads ─────────────────────────────────────────────────────

@@ -642,7 +642,13 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       if (creds.accessToken) body.append('auth', creds.accessToken);
       const res = await fetch(this.bitrixUrl('crm.lead.update', creds), { method: 'POST', body });
       const data = (await res.json()) as any;
-      return data.result === true;
+      if (data.result !== true) {
+        // Previously silent — callers didn't check this return value, so a
+        // failure here (e.g. the lead was deleted in Bitrix) was invisible.
+        this.logger.warn(`assignLeadInBitrix for #${leadId} → user ${assigneeUserId} did not confirm: ${JSON.stringify(data)}`);
+        return false;
+      }
+      return true;
     } catch (err) {
       this.logger.error(`assignLeadInBitrix failed: ${(err as Error).message}`);
       return false;

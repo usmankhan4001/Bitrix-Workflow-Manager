@@ -712,6 +712,27 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
         this.logger.warn(`writeAssignmentHistory for #${leadId} did not confirm: ${JSON.stringify(data)}`);
         return false;
       }
+
+      // crm.lead.update can report result:true for the whole call while Bitrix
+      // silently drops one specific field it rejected (wrong entity scope,
+      // field permissions, etc) — reading straight back makes that visible in
+      // the logs instead of trusting the update call's own report.
+      try {
+        const sep = this.bitrixUrl('crm.lead.get', creds).includes('?') ? '&' : '?';
+        const verifyRes = await fetch(`${this.bitrixUrl('crm.lead.get', creds)}${sep}id=${leadId}`);
+        const verifyData = (await verifyRes.json()) as any;
+        if (!('result' in verifyData) || !verifyData.result) {
+          this.logger.warn(`writeAssignmentHistory verify for #${leadId}: crm.lead.get returned no result — ${JSON.stringify(verifyData).slice(0, 300)}`);
+        } else if (!(fieldCode in verifyData.result)) {
+          this.logger.warn(`writeAssignmentHistory verify for #${leadId}: "${fieldCode}" is not present on the Lead entity at all — check the field was created under Leads specifically, not Deals/Contacts/Companies`);
+        } else {
+          const stored = verifyData.result[fieldCode];
+          this.logger.log(`writeAssignmentHistory verify for #${leadId} (${fieldCode}): ${stored === null ? 'null (write did not stick)' : JSON.stringify(stored).slice(0, 500)}`);
+        }
+      } catch (verifyErr) {
+        this.logger.warn(`writeAssignmentHistory verify-read failed for #${leadId}: ${(verifyErr as Error).message}`);
+      }
+
       return true;
     } catch (err) {
       this.logger.warn(`writeAssignmentHistory failed for #${leadId}: ${(err as Error).message}`);

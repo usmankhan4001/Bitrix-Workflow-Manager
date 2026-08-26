@@ -20,6 +20,7 @@ const SETTING_DEFAULTS: Record<string, string> = {
   SLA_MINUTES: '2',                   // TEMP: set low for testing — how long an agent has, in business minutes, before the lead rotates to the next agent. Change back (or edit in Settings) once testing is done.
   MAX_ROTATION_LAPS: '2',             // how many full laps through the active roster before escalating
   NEW_LEAD_STATUS_ID: 'NEW',          // Bitrix STATUS_ID that counts as "not yet worked" — any other value closes the SLA clock
+  ASSIGNMENT_HISTORY_FIELD: 'UF_CRM_1787754199499', // Bitrix Lead custom field (JSON array) that logs every handoff — who held it, when, and why they stopped
   SELF_CREATED_SOURCE_IDS: '[]',      // JSON array of Bitrix SOURCE_ID values that mean "agent made this lead themselves" — excluded from the workflow entirely
   ALLOWED_SOURCES: '[]',              // JSON array of source IDs eligible for assignment; empty = all sources allowed
   WORKFLOW_MANAGER_ID: '1',
@@ -49,6 +50,18 @@ interface BitrixCreds {
   accessToken?: string;
   domain?: string;
   webhookBase?: string; // full webhook URL like https://pcicrm.bitrix24.com/rest/11/token
+}
+
+// One holding period in the Bitrix-visible assignment history (ASSIGNMENT_HISTORY_FIELD).
+// left_at/outcome are null while this entry is the current holder.
+interface AssignmentHistoryEntry {
+  agent_id: string;
+  agent_name: string;
+  bitrix_user_id: string;
+  lap: number; // 0 for the Escalation Manager, since laps don't apply to them
+  assigned_at: string; // Asia/Karachi, ISO 8601 with +05:00 offset
+  left_at: string | null;
+  outcome: 'worked' | 'missed' | 'manual_reassigned' | null;
 }
 
 @Injectable()
@@ -315,6 +328,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       cursor.setTime(segmentEnd.getTime());
     }
     return total;
+  }
+
+  // Pakistan doesn't observe DST, so the offset is always a fixed +05:00 — no
+  // timezone library needed. Shifting the instant forward 5h then formatting
+  // with toISOString() (always UTC) yields Karachi's wall-clock digits; the
+  // trailing "Z" is then relabeled "+05:00" since that's the true offset, not UTC.
+  private toKarachiISOString(date: Date): string {
+    const shifted = new Date(date.getTime() + 5 * 3600 * 1000);
+    return shifted.toISOString().replace('Z', '+05:00');
   }
 
   // ─── Self-created leads ─────────────────────────────────────────────────────
@@ -658,6 +680,87 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
   }
 
+  // ─── Assignment history (Bitrix-visible, replaces needing to query our DB) ─
+  // A JSON array written straight to a Lead custom field, one entry per holding
+  // period: who had it, when they got it, when they stopped, and why. This is
+  // what lets "how long did it sit with X before it moved" and "worked vs
+  // missed vs manually moved" counts be answered directly from Bitrix data,
+  // without needing access to our own database.
+
+  private async readAssignmentHistory(leadId: string, fieldCode: string, creds: BitrixCreds): Promise<AssignmentHistoryEntry[]> {
+    try {
+      const sep = this.bitrixUrl('crm.lead.get', creds).includes('?') ? '&' : '?';
+      const res = await fetch(`${this.bitrixUrl('crm.lead.get', creds)}${sep}id=${leadId}`);
+      const data = (await res.json()) as any;
+      const raw = data.result?.[fieldCode];
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      this.logger.warn(`readAssignmentHistory failed for #${leadId}: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  private async writeAssignmentHistory(leadId: string, entries: AssignmentHistoryEntry[], fieldCode: string, creds: BitrixCreds): Promise<boolean> {
+    try {
+      const body = new URLSearchParams({ id: leadId, [`fields[${fieldCode}]`]: JSON.stringify(entries) });
+      if (creds.accessToken) body.append('auth', creds.accessToken);
+      const res = await fetch(this.bitrixUrl('crm.lead.update', creds), { method: 'POST', body });
+      const data = (await res.json()) as any;
+      if (data.result !== true) {
+        this.logger.warn(`writeAssignmentHistory for #${leadId} did not confirm: ${JSON.stringify(data)}`);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      this.logger.warn(`writeAssignmentHistory failed for #${leadId}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  // Closes out the current holder's entry (when they stopped, and why) and opens
+  // a new one for whoever holds it now. Never throws — a failure here logs and
+  // moves on rather than blocking the actual reassignment, since this field is
+  // a reporting aid, not the source of truth (LeadRotation + Bitrix ASSIGNED_BY_ID
+  // are). newHolder is null for the "worked" case, where nobody takes over.
+  //
+  // Known limitation: this is a read-modify-write against a single Bitrix field,
+  // not atomic. Two handoffs for the same lead firing within the same instant
+  // (e.g. a webhook and the SLA sweep landing together) could race and one
+  // could clobber the other. In practice handoffs for one lead are minutes
+  // apart, so this is a low-probability edge case, not a correctness guarantee.
+  private async recordAssignmentHandoff(
+    leadId: string,
+    newHolder: { id: string; name: string; bitrix_user_id: string } | null,
+    lap: number,
+    previousOutcome: 'worked' | 'missed' | 'manual_reassigned' | null,
+    settings: Record<string, string>,
+    creds: BitrixCreds,
+  ): Promise<void> {
+    const fieldCode = settings.ASSIGNMENT_HISTORY_FIELD;
+    if (!fieldCode) return;
+    const history = await this.readAssignmentHistory(leadId, fieldCode, creds);
+    const open = history[history.length - 1];
+    const now = this.toKarachiISOString(new Date());
+    if (open && !open.left_at) {
+      open.left_at = now;
+      open.outcome = previousOutcome;
+    }
+    if (newHolder) {
+      history.push({
+        agent_id: newHolder.id,
+        agent_name: newHolder.name,
+        bitrix_user_id: newHolder.bitrix_user_id,
+        lap,
+        assigned_at: now,
+        left_at: null,
+        outcome: null,
+      });
+    }
+    await this.writeAssignmentHistory(leadId, history, fieldCode, creds);
+  }
+
   // Native Bitrix24 in-app notification (bell icon + activity stream), used
   // alongside WhatsApp so an agent is alerted even without WhatsApp configured.
   async sendBitrixNotification(userId: string, message: string, creds: BitrixCreds): Promise<boolean> {
@@ -667,7 +770,16 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       if (creds.accessToken) body.append('auth', creds.accessToken);
       const res = await fetch(this.bitrixUrl('im.notify.personal.add', creds), { method: 'POST', body });
       const data = (await res.json()) as any;
-      return !data.error;
+      if (data.error) {
+        // Bitrix returned an error body instead of throwing — this was previously
+        // swallowed silently. im.notify.personal.add in particular is only
+        // available to local/OAuth applications on some portals; a plain inbound
+        // webhook can be rejected here even with the "im" scope granted, which
+        // this log line makes visible instead of guessing.
+        this.logger.warn(`sendBitrixNotification failed for user ${userId}: ${data.error_description || data.error}`);
+        return false;
+      }
+      return true;
     } catch (err) {
       this.logger.warn(`sendBitrixNotification failed for user ${userId}: ${(err as Error).message}`);
       return false;
@@ -829,10 +941,15 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   private async assignToAgent(
     leadId: string, lead: LeadDetails, agent: any, team: string,
     slaMinutes: number, settings: Record<string, string>, creds: BitrixCreds, reason: string,
-    lapNumber = 1,
+    lapNumber = 1, previousOutcome: 'missed' | 'manual_reassigned' | null = null,
   ): Promise<any> {
     await this.assignLeadInBitrix(leadId, agent.bitrix_user_id, creds);
     await this.setKnownOwner(leadId, agent.bitrix_user_id);
+    await this.recordAssignmentHandoff(
+      leadId,
+      { id: agent.id || 'manual-assignee', name: agent.name, bitrix_user_id: agent.bitrix_user_id },
+      lapNumber, previousOutcome, settings, creds,
+    );
 
     await this.assignmentLog.upsert({
       where: { lead_id_agent_id: { lead_id: leadId, agent_id: agent.id || 'manual-assignee' } },
@@ -865,6 +982,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   private async escalateToManager(
     leadId: string, lead: LeadDetails, team: string,
     reason: string, settings: Record<string, string>, creds: BitrixCreds,
+    previousOutcome: 'missed' | null = null,
   ): Promise<any> {
     const managerId = settings.WORKFLOW_MANAGER_ID || '1';
     const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
@@ -872,6 +990,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     await this.assignLeadInBitrix(leadId, managerId, creds);
     await this.setKnownOwner(leadId, managerId);
+    await this.recordAssignmentHandoff(
+      leadId,
+      { id: manager?.id || 'escalation-manager', name: manager?.name || `Manager #${managerId}`, bitrix_user_id: managerId },
+      0, previousOutcome, settings, creds,
+    );
 
     await this.assignmentLog.upsert({
       where: { lead_id_agent_id: { lead_id: leadId, agent_id: manager?.id || 'escalation-manager' } },
@@ -905,12 +1028,19 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     settings: Record<string, string>, creds: BitrixCreds,
   ): Promise<boolean> {
     let waNotified = false;
-    if (settings.WHATSAPP_ENABLED === 'true' && agent.whatsapp_phone) {
+    if (settings.WHATSAPP_ENABLED !== 'true') {
+      this.logger.log(`WhatsApp skipped for ${agent.name} — WHATSAPP_ENABLED is off`);
+    } else if (!agent.whatsapp_phone) {
+      this.logger.log(`WhatsApp skipped for ${agent.name} — no whatsapp_phone on their agent record`);
+    } else {
       waNotified = await this.whatsapp.sendLeadAssignedNotification(agent.whatsapp_phone, agent.name, lead.name, lead.phone || '', slaMinutes, lead.source);
     }
     if (agent.bitrix_user_id) {
       const msg = `New lead assigned: ${lead.name} (${lead.phone || 'no phone'}). You have ${slaMinutes} minutes to move it out of "New Lead" before it moves to the next agent.`;
-      await this.sendBitrixNotification(agent.bitrix_user_id, msg, creds);
+      const ok = await this.sendBitrixNotification(agent.bitrix_user_id, msg, creds);
+      if (!ok) this.logger.warn(`Bitrix in-app notify to ${agent.name} did not go through — see reason above`);
+    } else {
+      this.logger.log(`Bitrix in-app notify skipped for ${agent.name} — no bitrix_user_id on their agent record`);
     }
     return waNotified;
   }
@@ -919,12 +1049,17 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     manager: any, lead: LeadDetails, reason: string, settings: Record<string, string>, creds: BitrixCreds,
   ): Promise<boolean> {
     let waNotified = false;
-    if (settings.WHATSAPP_ENABLED === 'true' && manager.whatsapp_phone) {
+    if (settings.WHATSAPP_ENABLED !== 'true') {
+      this.logger.log(`WhatsApp skipped for ${manager.name} — WHATSAPP_ENABLED is off`);
+    } else if (!manager.whatsapp_phone) {
+      this.logger.log(`WhatsApp skipped for ${manager.name} — no whatsapp_phone on their agent record`);
+    } else {
       waNotified = await this.whatsapp.sendEscalationNotification(manager.whatsapp_phone, manager.name, lead.name, lead.phone || '', reason, lead.source);
     }
     if (manager.bitrix_user_id) {
       const msg = `Lead escalated to you: ${lead.name} (${lead.phone || 'no phone'}). Reason: ${reason}. No auto-timer runs until you assign it to someone.`;
-      await this.sendBitrixNotification(manager.bitrix_user_id, msg, creds);
+      const ok = await this.sendBitrixNotification(manager.bitrix_user_id, msg, creds);
+      if (!ok) this.logger.warn(`Bitrix in-app notify to ${manager.name} did not go through — see reason above`);
     }
     return waNotified;
   }
@@ -1025,12 +1160,13 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // per the product rule, any stage change (forward, junk, or otherwise) counts
   // as the agent having worked it. Runs regardless of who changed it or whether
   // the owner also changed.
-  private async closeRotationIfStageChanged(leadId: string, lead: LeadDetails, settings: Record<string, string>): Promise<void> {
+  private async closeRotationIfStageChanged(leadId: string, lead: LeadDetails, settings: Record<string, string>, creds: BitrixCreds): Promise<void> {
     const newStatus = settings.NEW_LEAD_STATUS_ID || 'NEW';
     if (!lead.statusId || lead.statusId === newStatus) return;
     const row = await this.leadRotation.findUnique({ where: { lead_id: leadId } });
     if (row && row.status === 'active') {
       await this.leadRotation.update({ where: { lead_id: leadId }, data: { status: 'done' } });
+      await this.recordAssignmentHandoff(leadId, null, 0, 'worked', settings, creds);
       this.logger.log(`Lead #${leadId} left "${newStatus}" stage (now "${lead.statusId}") — SLA rotation closed`);
     }
   }
@@ -1051,7 +1187,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const lead = await this.fetchLeadDetails(String(leadId), creds);
     const managerId = settings.WORKFLOW_MANAGER_ID || '1';
 
-    await this.closeRotationIfStageChanged(String(leadId), lead, settings);
+    await this.closeRotationIfStageChanged(String(leadId), lead, settings, creds);
 
     // Ignore events where the owner hasn't actually changed since we last saw
     // it — e.g. someone commenting on or editing a lead that's already
@@ -1074,6 +1210,11 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       await this.setKnownOwner(String(leadId), lead.assignedById);
       const manager = await this.agent.findFirst({ where: { bitrix_user_id: managerId } });
       const team = (manager?.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
+      await this.recordAssignmentHandoff(
+        String(leadId),
+        { id: manager?.id || 'escalation-manager', name: manager?.name || `Manager #${managerId}`, bitrix_user_id: managerId },
+        0, 'manual_reassigned', settings, creds,
+      );
       await this.leadRotation.upsert({
         where: { lead_id: String(leadId) },
         update: { team, current_agent_id: manager?.id || 'escalation-manager', current_agent_name: manager?.name || `Manager #${managerId}`, assigned_at: new Date(), status: 'escalated' },
@@ -1094,7 +1235,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     const team = (repAgent.team || settings.LEAD_ASSIGNMENT_TEAM || 'B2C').trim();
     const slaMinutes = parseInt(settings.SLA_MINUTES || '60', 10);
     this.logger.log(`Lead #${leadId} manually reassigned → ${repAgent.name}. Restarting SLA rotation.`);
-    await this.assignToAgent(String(leadId), lead, repAgent, team, slaMinutes, settings, creds, 'manual reassignment');
+    await this.assignToAgent(String(leadId), lead, repAgent, team, slaMinutes, settings, creds, 'manual reassignment', 1, 'manual_reassigned');
 
     return { action: 'restarted', detail: `SLA rotation restarted for ${repAgent.name}` };
   }
@@ -1203,7 +1344,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     });
 
     if (roster.length === 0) {
-      await this.escalateToManager(row.lead_id, lead, row.team, 'no active agents left in team', settings, creds);
+      await this.escalateToManager(row.lead_id, lead, row.team, 'no active agents left in team', settings, creds, 'missed');
       return 'escalated';
     }
 
@@ -1219,18 +1360,18 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     if (next) {
       tried.push(next.id);
       await this.leadRotation.update({ where: { id: row.id }, data: { tried_agent_ids: JSON.stringify(tried) } });
-      await this.assignToAgent(row.lead_id, lead, next, row.team, slaMinutes, settings, creds, `SLA timeout (lap ${row.lap_number})`, row.lap_number);
+      await this.assignToAgent(row.lead_id, lead, next, row.team, slaMinutes, settings, creds, `SLA timeout (lap ${row.lap_number})`, row.lap_number, 'missed');
       return 'rotated';
     }
 
     // Every active agent has had a turn this lap.
     if (row.lap_number < maxLaps) {
       const first = roster[0];
-      await this.assignToAgent(row.lead_id, lead, first, row.team, slaMinutes, settings, creds, 'starting next rotation lap', row.lap_number + 1);
+      await this.assignToAgent(row.lead_id, lead, first, row.team, slaMinutes, settings, creds, 'starting next rotation lap', row.lap_number + 1, 'missed');
       return 'rotated';
     }
 
-    await this.escalateToManager(row.lead_id, lead, row.team, `exhausted ${maxLaps} full rotation laps with no action`, settings, creds);
+    await this.escalateToManager(row.lead_id, lead, row.team, `exhausted ${maxLaps} full rotation laps with no action`, settings, creds, 'missed');
     return 'escalated';
   }
 

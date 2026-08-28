@@ -154,6 +154,20 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     return { webhookBase: base };
   }
 
+  // im.notify.personal.add rejects the main webhook token with "requires
+  // higher privileges" — that webhook's owning user isn't a full
+  // Administrator. This is a separate, Administrator-owned webhook used only
+  // for that one call. Falls back to the main webhook if unset, so nothing
+  // breaks (beyond the notification still failing exactly as it does today)
+  // until BITRIX_NOTIFICATION_WEBHOOK_TOKEN is actually configured.
+  private getNotificationWebhookCreds(): BitrixCreds {
+    const token = process.env.BITRIX_NOTIFICATION_WEBHOOK_TOKEN || '';
+    if (!token) return this.getWebhookCreds();
+    const portal = process.env.BITRIX_PORTAL_URL || 'https://pcicrm.bitrix24.com';
+    const base = token.startsWith('http') ? token.replace(/\/$/, '') : `${portal}/rest/${token}`.replace(/\/$/, '');
+    return { webhookBase: base };
+  }
+
   // ─── Agents ────────────────────────────────────────────────────────────────
 
   async getAgents() {
@@ -776,8 +790,14 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
   // Native Bitrix24 in-app notification (bell icon + activity stream), used
   // alongside WhatsApp so an agent is alerted even without WhatsApp configured.
-  async sendBitrixNotification(userId: string, message: string, creds: BitrixCreds): Promise<boolean> {
+  // Deliberately ignores whatever creds the caller is using elsewhere and
+  // always goes through getNotificationWebhookCreds() — im.notify.personal.add
+  // rejected the main webhook with "requires higher privileges" (the owning
+  // user isn't a full Administrator), which is a rights issue on that specific
+  // webhook, not a blanket restriction on webhooks calling this method at all.
+  async sendBitrixNotification(userId: string, message: string): Promise<boolean> {
     if (!userId) return false;
+    const creds = this.getNotificationWebhookCreds();
     try {
       const body = new URLSearchParams({ 'fields[USER_ID]': userId, 'fields[MESSAGE]': message });
       if (creds.accessToken) body.append('auth', creds.accessToken);
@@ -785,10 +805,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       const data = (await res.json()) as any;
       if (data.error) {
         // Bitrix returned an error body instead of throwing — this was previously
-        // swallowed silently. im.notify.personal.add in particular is only
-        // available to local/OAuth applications on some portals; a plain inbound
-        // webhook can be rejected here even with the "im" scope granted, which
-        // this log line makes visible instead of guessing.
+        // swallowed silently.
         this.logger.warn(`sendBitrixNotification failed for user ${userId}: ${data.error_description || data.error}`);
         return false;
       }
@@ -979,7 +996,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
       },
     });
 
-    const waNotified = await this.notifyAgent(agent, lead, slaMinutes, settings, creds);
+    const waNotified = await this.notifyAgent(agent, lead, slaMinutes, settings);
     this.logger.log(`"${lead.name}" (${lead.source}) → ${agent.name} [${team}] (${reason}, lap ${lapNumber}). WA: ${waNotified}`);
     return { success: true, agent };
   }
@@ -1021,7 +1038,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
 
     let waNotified = false;
     if (manager) {
-      waNotified = await this.notifyEscalation(manager, lead, reason, settings, creds);
+      waNotified = await this.notifyEscalation(manager, lead, reason, settings);
     }
     return { success: true, agent: manager, message: reason, waNotified };
   }
@@ -1029,8 +1046,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   // Sends the "assigned to you" (or "escalated to you") alert on both channels
   // WhatsApp and Bitrix in-app notify — used by assignToAgent/notifyEscalation.
   private async notifyAgent(
-    agent: any, lead: LeadDetails, slaMinutes: number,
-    settings: Record<string, string>, creds: BitrixCreds,
+    agent: any, lead: LeadDetails, slaMinutes: number, settings: Record<string, string>,
   ): Promise<boolean> {
     let waNotified = false;
     if (settings.WHATSAPP_ENABLED !== 'true') {
@@ -1042,7 +1058,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
     if (agent.bitrix_user_id) {
       const msg = `New lead assigned: ${lead.name} (${lead.phone || 'no phone'}). You have ${slaMinutes} minutes to move it out of "New Lead" before it moves to the next agent.`;
-      const ok = await this.sendBitrixNotification(agent.bitrix_user_id, msg, creds);
+      const ok = await this.sendBitrixNotification(agent.bitrix_user_id, msg);
       if (!ok) this.logger.warn(`Bitrix in-app notify to ${agent.name} did not go through — see reason above`);
     } else {
       this.logger.log(`Bitrix in-app notify skipped for ${agent.name} — no bitrix_user_id on their agent record`);
@@ -1051,7 +1067,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
   }
 
   private async notifyEscalation(
-    manager: any, lead: LeadDetails, reason: string, settings: Record<string, string>, creds: BitrixCreds,
+    manager: any, lead: LeadDetails, reason: string, settings: Record<string, string>,
   ): Promise<boolean> {
     let waNotified = false;
     if (settings.WHATSAPP_ENABLED !== 'true') {
@@ -1063,7 +1079,7 @@ export class WorkflowService extends PrismaClient implements OnModuleInit, OnMod
     }
     if (manager.bitrix_user_id) {
       const msg = `Lead escalated to you: ${lead.name} (${lead.phone || 'no phone'}). Reason: ${reason}. No auto-timer runs until you assign it to someone.`;
-      const ok = await this.sendBitrixNotification(manager.bitrix_user_id, msg, creds);
+      const ok = await this.sendBitrixNotification(manager.bitrix_user_id, msg);
       if (!ok) this.logger.warn(`Bitrix in-app notify to ${manager.name} did not go through — see reason above`);
     }
     return waNotified;

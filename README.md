@@ -99,6 +99,13 @@ BITRIX_CLIENT_SECRET=your_client_secret
 BITRIX_REDIRECT_URI="http://localhost:3000/api/bitrix/oauth/callback"
 BITRIX_WEBHOOK_TOKEN=your_inbound_webhook_url
 
+# Optional: a SEPARATE inbound webhook, owned by a Bitrix Administrator, used
+# only for im.notify.personal.add (the in-app bell notification). The main
+# webhook above can get rejected there with "requires higher privileges" even
+# with the "im" scope granted, if its owning user isn't a full Administrator.
+# Leave unset to fall back to BITRIX_WEBHOOK_TOKEN (same behavior as before).
+BITRIX_NOTIFICATION_WEBHOOK_TOKEN=
+
 # Frontend Dashboard URL
 FRONTEND_URL="http://localhost:5173"
 
